@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meme Rate Dashboard - Frutiger Aero</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚀</text></svg>">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <div class="logo-icon">🚀</div>
+                    <div class="logo-text">
+                        <h1>Meme Rate</h1>
+                        <span>Dashboard</span>
+                    </div>
+                </div>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-title">الرئيسية</div>
+                    <a href="#dashboard" class="nav-item active">
+                        <span class="nav-icon">📊</span>
+                        <span>لوحة التحكم</span>
+                    </a>
+                    <a href="#servers" class="nav-item">
+                        <span class="nav-icon">🌐</span>
+                        <span>السيرفرات</span>
+                    </a>
+                </div>
+                
+                <div class="nav-section">
+                    <div class="nav-title">الميزات</div>
+                    <a href="#meme-rating" class="nav-item">
+                        <span class="nav-icon">⭐</span>
+                        <span>تقييم الميمز</span>
+                    </a>
+                    <a href="#video-download" class="nav-item">
+                        <span class="nav-icon">📥</span>
+                        <span>تحميل الفيديوهات</span>
+                    </a>
+                    <a href="#statistics" class="nav-item">
+                        <span class="nav-icon">📈</span>
+                        <span>الإحصائيات</span>
+                    </a>
+                </div>
+                
+                <div class="nav-section">
+                    <div class="nav-title">الإعدادات</div>
+                    <a href="#settings" class="nav-item">
+                        <span class="nav-icon">⚙️</span>
+                        <span>الإعدادات</span>
+                    </a>
+                    <a href="/auth/logout" class="nav-item">
+                        <span class="nav-icon">🚪</span>
+                        <span>تسجيل الخروج</span>
+                    </a>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="main-header">
+                <div class="header-content">
+                    <div class="header-left">
+                        <h2 class="page-title">لوحة التحكم</h2>
+                        <p class="page-subtitle">مرحباً بك في لوحة تحكم بوت تقييم الميمز</p>
+                    </div>
+                    <div class="header-right">
+                        <div class="user-info">
+                            <div class="user-avatar">
+                                <img src="https://cdn.discordapp.com/embed/avatars/0/00000000000000000000000000000000000.png" alt="User" id="userAvatar">
+                            </div>
+                            <div class="user-details">
+                                <div class="user-name" id="userName">جاري التحميل...</div>
+                                <div class="user-status">
+                                    <span class="status-dot online"></span>
+                                    <span>متصل</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Dashboard Content -->
+            <div class="content-area">
+                <!-- Stats Cards -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">🌐</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="serverCount">0</div>
+                            <div class="stat-label">السيرفرات</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">👥</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="totalUsers">0</div>
+                            <div class="stat-label">المستخدمين</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">⭐</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="totalMemes">0</div>
+                            <div class="stat-label">الميمز المقيمة</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">📥</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="downloadCount">0</div>
+                            <div class="stat-label">التحميلات</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Server List -->
+                <div class="servers-section">
+                    <div class="section-header">
+                        <h3>السيرفرات النشطة</h3>
+                        <button class="btn-primary" onclick="refreshServers()">
+                            <span>🔄</span>
+                            تحديث
+                        </button>
+                    </div>
+                    <div class="servers-grid" id="serversGrid">
+                        <div class="loading-skeleton">
+                            <div class="skeleton-card"></div>
+                            <div class="skeleton-card"></div>
+                            <div class="skeleton-card"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Activity -->
+                <div class="activity-section">
+                    <div class="section-header">
+                        <h3>النشاط الأخير</h3>
+                        <button class="btn-secondary" onclick="refreshActivity()">
+                            <span>🔄</span>
+                            تحديث
+                        </button>
+                    </div>
+                    <div class="activity-list" id="activityList">
+                        <div class="loading-skeleton">
+                            <div class="skeleton-item"></div>
+                            <div class="skeleton-item"></div>
+                            <div class="skeleton-item"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">جاري التحميل...</div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
