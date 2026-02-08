@@ -148,6 +148,129 @@ client.once("ready", async () => {
     status: 'dnd'
   });
 
+  // تسجيل الأوامر تلقائياً عند التشغيل
+  try {
+    const { REST, Routes } = require("discord.js");
+    const memerate = new (require("discord.js").SlashCommandBuilder)()
+      .setName("memerate")
+      .setDescription("إعدادات بوت تقييم الميمز")
+      .setDefaultMemberPermissions(require("discord.js").PermissionFlagsBits.ManageGuild)
+      .addSubcommand((sc) => sc.setName("status").setDescription("عرض الإعدادات الحالية"))
+      .addSubcommand((sc) =>
+        sc
+          .setName("setduration")
+          .setDescription("تحديد مدة التصويت بالدقائق")
+          .addIntegerOption((opt) =>
+            opt
+              .setName("minutes")
+              .setDescription("مثال: 10 أو 30")
+              .setRequired(true)
+              .setMinValue(1)
+              .setMaxValue(24 * 60)
+          )
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("setemojis")
+          .setDescription("تحديد إيموجيات التصويت")
+          .addStringOption((opt) =>
+            opt.setName("positive").setDescription("إيموجي التقييم الإيجابي (مثال ✅ أو <:up:123>)").setRequired(true)
+          )
+          .addStringOption((opt) =>
+            opt.setName("negative").setDescription("إيموجي التقييم السلبي (مثال ❌ أو <:down:123>)").setRequired(true)
+          )
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("addchannel")
+          .setDescription("إضافة قناة للمراقبة")
+          .addChannelOption((opt) =>
+            opt
+              .setName("channel")
+              .setDescription("القناة التي يراقبها البوت")
+              .setRequired(true)
+              .addChannelTypes(require("discord.js").ChannelType.GuildText, require("discord.js").ChannelType.GuildAnnouncement)
+          )
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("removechannel")
+          .setDescription("إزالة قناة من المراقبة")
+          .addChannelOption((opt) =>
+            opt
+              .setName("channel")
+              .setDescription("القناة التي تريد إيقاف مراقبتها")
+              .setRequired(true)
+              .addChannelTypes(require("discord.js").ChannelType.GuildText, require("discord.js").ChannelType.GuildAnnouncement)
+          )
+      );
+
+    const download = new (require("discord.js").SlashCommandBuilder)()
+      .setName("download")
+      .setDescription("إدارة ميزة تحميل الفيديوهات")
+      .setDefaultMemberPermissions(require("discord.js").PermissionFlagsBits.ManageGuild)
+      .addSubcommand((sc) => sc.setName("status").setDescription("عرض إعدادات ميزة التحميل"))
+      .addSubcommand((sc) =>
+        sc
+          .setName("toggle")
+          .setDescription("تفعيل أو تعطيل ميزة التحميل")
+          .addBooleanOption((opt) =>
+            opt
+              .setName("enabled")
+              .setDescription("تفعيل (true) أو تعطيل (false)")
+              .setRequired(true)
+          )
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("addchannel")
+          .setDescription("إضافة قناة لقائمة القنوات المسموح فيها التحميل")
+          .addChannelOption((opt) =>
+            opt
+              .setName("channel")
+              .setDescription("القناة المراد إضافتها")
+              .setRequired(true)
+              .addChannelTypes(require("discord.js").ChannelType.GuildText, require("discord.js").ChannelType.GuildAnnouncement)
+          )
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("removechannel")
+          .setDescription("إزالة قناة من قائمة القنوات المسموح فيها التحميل")
+          .addChannelOption((opt) =>
+            opt
+              .setName("channel")
+              .setDescription("القناة المراد إزالتها")
+              .setRequired(true)
+              .addChannelTypes(require("discord.js").ChannelType.GuildText, require("discord.js").ChannelType.GuildAnnouncement)
+          )
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("setchannels")
+          .setDescription("تحديد نمط القنوات (كل القنوات أو محددة)")
+          .addStringOption((opt) =>
+            opt
+              .setName("mode")
+              .setDescription("اختر النمط")
+              .setRequired(true)
+              .addChoices(
+                { name: "كل القنوات", value: "all" },
+                { name: "قنوات محددة فقط", value: "specific" }
+              )
+          )
+      );
+
+    const rest = new REST({ version: "10" }).setToken(token);
+    const commands = [memerate.toJSON(), download.toJSON()];
+    
+    console.log("[Bot] Registering slash commands...");
+    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+    console.log("[Bot] ✅ Slash commands registered successfully!");
+  } catch (error) {
+    console.error("[Bot] Failed to register commands:", error);
+  }
+
   // إعادة جدولة المؤقّتات بعد إعادة تشغيل البوت
   const pending = readPending();
   const now = Date.now();
