@@ -32,7 +32,7 @@ app.use(session({
     resave: true,
     saveUninitialized: true,
     cookie: {
-        secure: false, // مؤقتاً معطل للتجربة
+        secure: process.env.NODE_ENV === 'production', // Enable secure cookies in production
         httpOnly: true,
         sameSite: 'lax',
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 أيام
@@ -60,7 +60,19 @@ app.get("/health", (req, res) => {
         status: "ok",
         dashboardPath,
         indexExists: fs.existsSync(indexPath),
-        discordConnected: discordClient !== null
+        discordConnected: discordClient !== null,
+        port: PORT,
+        timestamp: new Date().toISOString()
+    });
+});
+
+// Root health check for Render
+app.get("/", (req, res) => {
+    res.json({
+        status: "ok",
+        message: "Meme Rating Bot is running",
+        discordConnected: discordClient !== null,
+        timestamp: new Date().toISOString()
     });
 });
 
@@ -156,15 +168,10 @@ app.get("/api/guilds/:guildId/all-streaks", (req, res) => {
     res.json(streaks);
 });
 
-// Route للصفحة الرئيسية - تعرض صفحة الهبوط
-app.get("/", (req, res) => {
-    res.sendFile(path.join(dashboardPath, "landing.html"));
-});
-
 // Catch-all middleware - يجب أن يكون آخر middleware
 // يستثني مسارات الـ API والملفات الثابتة
 app.use((req, res, next) => {
-    if (req.path.startsWith("/api/") || req.path.startsWith("/auth/")) {
+    if (req.path.startsWith("/api/") || req.path.startsWith("/auth/") || req.path === "/health") {
         return next(); // اترك الـ API routes تمر
     }
     // إذا الملف موجود، اتركه يمر (للـ static files)
@@ -186,8 +193,17 @@ function startDashboard(client) {
     // بدء Express server فقط إذا لم يكن يعمل
     if (!serverInstance) {
         serverInstance = app.listen(PORT, '0.0.0.0', () => {
-            console.log(`[Dashboard] ✅ Running at http://localhost:${PORT}`);
-            console.log(`[Dashboard] Health check: http://localhost:${PORT}/health`);
+            console.log(`[Dashboard] ✅ Server running on port ${PORT}`);
+            console.log(`[Dashboard] Health check available at /health`);
+        });
+        
+        // Handle server errors
+        serverInstance.on('error', (err) => {
+            if (err.code === 'EADDRINUSE') {
+                console.error(`[Dashboard] Port ${PORT} is already in use`);
+            } else {
+                console.error('[Dashboard] Server error:', err);
+            }
         });
     }
 }
