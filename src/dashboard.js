@@ -1,220 +1,185 @@
 const express = require("express");
-const cors = require("cors");
 const path = require("path");
-const fs = require("fs");
-const session = require("express-session");
-const { getGuildConfig, setGuildConfig } = require("./configStore");
-const { getLeaderboard, resetUserStats, resetGuildStats } = require("./statsStore");
-const { getStreakLeaderboard, getStreak, getAllGuildStreaks } = require("./streakStore");
-const authRoutes = require("./auth");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-console.log(`[Dashboard] Initializing dashboard module`);
+console.log(`[Dashboard] Initializing simple status dashboard`);
 console.log(`[Dashboard] PORT from environment: ${process.env.PORT}`);
 console.log(`[Dashboard] Using PORT: ${PORT}`);
 
-// مسار مجلد الداشبورد
-const dashboardPath = path.resolve(__dirname, "..", "dashboard");
-console.log("[Dashboard] Static files path:", dashboardPath);
+// متغير لحفظ حالة البوت
+let botStatus = {
+    connected: false,
+    username: null,
+    guilds: 0,
+    uptime: 0,
+    startTime: null
+};
 
-// التحقق من وجود الملفات
-const indexPath = path.join(dashboardPath, "index.html");
-if (fs.existsSync(indexPath)) {
-    console.log("[Dashboard] ✅ index.html found");
-} else {
-    console.log("[Dashboard] ❌ index.html NOT found at:", indexPath);
+// متغير لحفظ الـ server instance
+let serverInstance = null;
+
+// تحديث حالة البوت
+function updateBotStatus(client) {
+    if (client && client.user) {
+        botStatus.connected = true;
+        botStatus.username = client.user.tag;
+        botStatus.guilds = client.guilds.cache.size;
+        botStatus.startTime = Date.now();
+        console.log(`[Dashboard] Bot status updated: ${botStatus.username} in ${botStatus.guilds} guilds`);
+    } else {
+        botStatus.connected = false;
+        botStatus.username = null;
+        botStatus.guilds = 0;
+        console.log("[Dashboard] Bot status: Disconnected");
+    }
 }
 
-// Trust proxy for Render (HTTPS behind load balancer)
-app.set('trust proxy', 1);
+// صفحة رئيسية بسيطة تعرض حالة البوت
+app.get("/", (req, res) => {
+    const uptime = botStatus.startTime ? Math.floor((Date.now() - botStatus.startTime) / 1000) : 0;
+    
+    const html = `
+    <!DOCTYPE html>
+    <html lang="ar" dir="rtl">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Meme Rating Bot - الحالة</title>
+        <style>
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                margin: 0;
+                padding: 20px;
+                min-height: 100vh;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+            }
+            .container {
+                background: rgba(255, 255, 255, 0.95);
+                border-radius: 20px;
+                padding: 40px;
+                box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+                text-align: center;
+                max-width: 500px;
+                width: 100%;
+            }
+            .status {
+                font-size: 24px;
+                font-weight: bold;
+                margin-bottom: 20px;
+            }
+            .online {
+                color: #22c55e;
+            }
+            .offline {
+                color: #ef4444;
+            }
+            .info {
+                background: #f3f4f6;
+                border-radius: 10px;
+                padding: 20px;
+                margin: 20px 0;
+                text-align: right;
+            }
+            .info-item {
+                margin: 10px 0;
+                font-size: 18px;
+            }
+            .refresh-btn {
+                background: #3b82f6;
+                color: white;
+                border: none;
+                padding: 12px 24px;
+                border-radius: 8px;
+                font-size: 16px;
+                cursor: pointer;
+                margin-top: 20px;
+            }
+            .refresh-btn:hover {
+                background: #2563eb;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🤖 Meme Rating Bot</h1>
+            <div class="status ${botStatus.connected ? 'online' : 'offline'}">
+                ${botStatus.connected ? '🟢 متصل' : '🔴 غير متصل'}
+            </div>
+            
+            <div class="info">
+                <div class="info-item">
+                    <strong>اسم البوت:</strong> ${botStatus.username || 'غير متصل'}
+                </div>
+                <div class="info-item">
+                    <strong>عدد السيرفرات:</strong> ${botStatus.guilds}
+                </div>
+                <div class="info-item">
+                    <strong>وقت التشغيل:</strong> ${uptime} ثانية
+                </div>
+                <div class="info-item">
+                    <strong>الحالة:</strong> ${botStatus.connected ? 'يعمل بشكل طبيعي' : 'في انتظار الاتصال'}
+                </div>
+            </div>
+            
+            <button class="refresh-btn" onclick="location.reload()">🔄 تحديث</button>
+        </div>
+        
+        <script>
+            // تحديث تلقائي كل 30 ثانية
+            setTimeout(() => location.reload(), 30000);
+        </script>
+    </body>
+    </html>
+    `;
+    
+    res.send(html);
+});
 
-// Session middleware
-app.use(session({
-    secret: process.env.SESSION_SECRET || "meme-rate-secret-key-change-in-production",
-    resave: true,
-    saveUninitialized: true,
-    cookie: {
-        secure: process.env.NODE_ENV === 'production', // Enable secure cookies in production
-        httpOnly: true,
-        sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 أيام
-    }
-}));
-
-app.use(cors({
-    origin: true,
-    credentials: true
-}));
-app.use(express.json());
-app.use(express.static(dashboardPath));
-
-// Auth routes
-app.use("/auth", authRoutes);
-app.use(authRoutes); // للـ /api/user routes
-
-// متغير لتخزين الـ Discord client
-let discordClient = null;
-
+// API endpoint لحالة البوت
+app.get("/api/status", (req, res) => {
+    const uptime = botStatus.startTime ? Math.floor((Date.now() - botStatus.startTime) / 1000) : 0;
+    res.json({
+        ...botStatus,
+        uptime,
+        timestamp: new Date().toISOString()
+    });
+});
 
 // Health check endpoint
 app.get("/health", (req, res) => {
     res.json({
         status: "ok",
-        dashboardPath,
-        indexExists: fs.existsSync(indexPath),
-        discordConnected: discordClient !== null,
+        botConnected: botStatus.connected,
         port: PORT,
         timestamp: new Date().toISOString()
     });
 });
 
-// Root health check for Render
-app.get("/", (req, res) => {
-    res.json({
-        status: "ok",
-        message: "Meme Rating Bot is running",
-        discordConnected: discordClient !== null,
-        timestamp: new Date().toISOString()
-    });
-});
-
-// الحصول على معلومات السيرفرات
-app.get("/api/guilds", (req, res) => {
-    if (!discordClient) {
-        return res.json([]); // إرجاع مصفوفة فارغة إذا لم يتصل البوت بعد
-    }
-    const guilds = discordClient.guilds.cache.map(g => ({
-        id: g.id,
-        name: g.name,
-        icon: g.iconURL({ size: 128 }),
-        memberCount: g.memberCount,
-    }));
-    res.json(guilds);
-});
-
-// الحصول على قنوات سيرفر
-app.get("/api/guilds/:guildId/channels", async (req, res) => {
-    if (!discordClient) {
-        return res.status(503).json({ error: "Bot not connected" });
-    }
-
-    try {
-        const guild = await discordClient.guilds.fetch(req.params.guildId).catch(() => null);
-        if (!guild) return res.status(404).json({ error: "Guild not found" });
-
-        // جلب جميع القنوات من Discord API
-        const fetchedChannels = await guild.channels.fetch();
-
-        const channels = fetchedChannels
-            .filter(c => c && (c.type === 0 || c.type === 5)) // Text & Announcement
-            .map(c => ({ id: c.id, name: c.name, type: c.type }));
-
-        res.json(channels);
-    } catch (err) {
-        console.error("[Dashboard] Error fetching channels:", err);
-        res.status(500).json({ error: "Failed to fetch channels" });
-    }
-});
-
-// الحصول على إعدادات سيرفر
-app.get("/api/guilds/:guildId/config", (req, res) => {
-    const config = getGuildConfig(req.params.guildId);
-    res.json(config);
-});
-
-// تحديث إعدادات سيرفر
-app.patch("/api/guilds/:guildId/config", (req, res) => {
-    const guildId = req.params.guildId;
-    const updates = req.body;
-    const newConfig = setGuildConfig(guildId, updates);
-    res.json(newConfig);
-});
-
-// الحصول على قائمة أسوأ الناشرين
-app.get("/api/guilds/:guildId/leaderboard", (req, res) => {
-    const limit = parseInt(req.query.limit) || 10;
-    const leaderboard = getLeaderboard(req.params.guildId, limit);
-    res.json(leaderboard);
-});
-
-// إعادة تعيين إحصائيات مستخدم
-app.delete("/api/guilds/:guildId/stats/:userId", (req, res) => {
-    resetUserStats(req.params.guildId, req.params.userId);
-    res.json({ success: true });
-});
-
-// إعادة تعيين إحصائيات السيرفر
-app.delete("/api/guilds/:guildId/stats", (req, res) => {
-    resetGuildStats(req.params.guildId);
-    res.json({ success: true });
-});
-
-// =============== Streak API ===============
-
-// الحصول على ليدربورد الستريك
-app.get("/api/guilds/:guildId/streaks", (req, res) => {
-    const limit = parseInt(req.query.limit) || 10;
-    const leaderboard = getStreakLeaderboard(req.params.guildId, limit);
-    res.json(leaderboard);
-});
-
-// الحصول على ستريك مستخدم معين
-app.get("/api/guilds/:guildId/streaks/:userId", (req, res) => {
-    const streak = getStreak(req.params.guildId, req.params.userId);
-    res.json(streak);
-});
-
-// الحصول على جميع الستريكات
-app.get("/api/guilds/:guildId/all-streaks", (req, res) => {
-    const streaks = getAllGuildStreaks(req.params.guildId);
-    res.json(streaks);
-});
-
-// Catch-all middleware - يجب أن يكون آخر middleware
-// يستثني مسارات الـ API والملفات الثابتة
-app.use((req, res, next) => {
-    if (req.path.startsWith("/api/") || req.path.startsWith("/auth/") || req.path === "/health") {
-        return next(); // اترك الـ API routes تمر
-    }
-    // إذا الملف موجود، اتركه يمر (للـ static files)
-    const filePath = path.join(dashboardPath, req.path);
-    if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-        return next();
-    }
-    // وإلا أرسل صفحة الهبوط
-    res.sendFile(path.join(dashboardPath, "landing.html"));
-});
-
-// متغير لحفظ الـ server instance
-let serverInstance = null;
-
-// Auto-start server for Render compatibility
-function autoStartServer() {
+// بدء السيرفر
+function startServer() {
     if (!serverInstance) {
-        console.log("[Dashboard] Auto-starting server for Render compatibility...");
-        console.log(`[Dashboard] Attempting to start server on port ${PORT}`);
+        console.log("[Dashboard] Starting server...");
         
         serverInstance = app.listen(PORT, '0.0.0.0', () => {
             console.log(`[Dashboard] ✅ Server running on port ${PORT}`);
-            console.log(`[Dashboard] Health check available at /health`);
-            console.log(`[Dashboard] Server address: ${serverInstance.address()}`);
+            console.log(`[Dashboard] Status page: http://localhost:${PORT}`);
+            console.log(`[Dashboard] Health check: http://localhost:${PORT}/health`);
         });
         
-        // Handle server errors
         serverInstance.on('error', (err) => {
             console.error('[Dashboard] Server error:', err);
             if (err.code === 'EADDRINUSE') {
                 console.error(`[Dashboard] Port ${PORT} is already in use`);
             } else if (err.code === 'EACCES') {
                 console.error(`[Dashboard] Permission denied for port ${PORT}`);
-            } else {
-                console.error('[Dashboard] Unknown server error:', err);
             }
         });
         
-        // Log when server is actually listening
         serverInstance.on('listening', () => {
             const addr = serverInstance.address();
             console.log(`[Dashboard] Server listening on ${addr.address}:${addr.port}`);
@@ -222,43 +187,18 @@ function autoStartServer() {
     }
 }
 
+// ربط مع البوت
 function startDashboard(client) {
-    discordClient = client;
-    console.log("[Dashboard] Discord client connected");
-    console.log(`[Dashboard] Attempting to start server on port ${PORT}`);
-
-    // بدء Express server فقط إذا لم يكن يعمل
-    if (!serverInstance) {
-        console.log("[Dashboard] Starting new server instance...");
-        serverInstance = app.listen(PORT, '0.0.0.0', () => {
-            console.log(`[Dashboard] ✅ Server running on port ${PORT}`);
-            console.log(`[Dashboard] Health check available at /health`);
-            console.log(`[Dashboard] Server address: ${serverInstance.address()}`);
-        });
-        
-        // Handle server errors
-        serverInstance.on('error', (err) => {
-            console.error('[Dashboard] Server error:', err);
-            if (err.code === 'EADDRINUSE') {
-                console.error(`[Dashboard] Port ${PORT} is already in use`);
-            } else if (err.code === 'EACCES') {
-                console.error(`[Dashboard] Permission denied for port ${PORT}`);
-            } else {
-                console.error('[Dashboard] Unknown server error:', err);
-            }
-        });
-        
-        // Log when server is actually listening
-        serverInstance.on('listening', () => {
-            const addr = serverInstance.address();
-            console.log(`[Dashboard] Server listening on ${addr.address}:${addr.port}`);
-        });
-    } else {
-        console.log("[Dashboard] Server instance already exists");
+    console.log("[Dashboard] Connecting to bot...");
+    updateBotStatus(client);
+    
+    // تحديث الحالة كل 30 ثانية
+    if (client) {
+        setInterval(() => updateBotStatus(client), 30000);
     }
 }
 
-// Auto-start server after a short delay for Render compatibility
-setTimeout(autoStartServer, 1000);
+// بدء السيرفر تلقائياً
+setTimeout(startServer, 1000);
 
-module.exports = { startDashboard };
+module.exports = { startDashboard, updateBotStatus };
