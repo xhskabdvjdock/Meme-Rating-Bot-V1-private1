@@ -256,11 +256,13 @@ function startDashboard(client) {
         // Explicit port binding for Render
         const bindPort = process.env.PORT || 10000;
         
+        console.log(`[Dashboard] Attempting to bind to port ${bindPort}...`);
+        
         serverInstance = app.listen(bindPort, '0.0.0.0', () => {
-            console.log(`[Dashboard] ✅ Server running on port ${bindPort}`);
+            console.log(`[Dashboard] ✅ Server successfully running on port ${bindPort}`);
             console.log(`[Dashboard] ✅ Health check: http://0.0.0.0:${bindPort}/health`);
-            console.log(`[Dashboard] ✅ External URL: https://meme-rate-bot.onrender.com`);
-            console.log(`[Dashboard] ✅ Port explicitly bound for Render!`);
+            console.log(`[Dashboard] ✅ External URL: https://meme-rating-bot-v1-private.onrender.com`);
+            console.log(`[Dashboard] ✅ Port bound and ready for Render!`);
         });
 
         // Handle server errors
@@ -268,6 +270,8 @@ function startDashboard(client) {
             console.error('[Dashboard] Server error:', err);
             if (err.code === 'EADDRINUSE') {
                 console.log(`[Dashboard] Port ${bindPort} is already in use`);
+            } else if (err.code === 'EACCES') {
+                console.log(`[Dashboard] Permission denied for port ${bindPort}`);
             }
         });
 
