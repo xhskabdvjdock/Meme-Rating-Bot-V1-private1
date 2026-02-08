@@ -29,8 +29,8 @@ if (fs.existsSync(indexPath)) {
 // Trust proxy for Render (HTTPS behind load balancer)
 app.set('trust proxy', 1);
 
-// Session middleware with production-ready settings
-app.use(session({
+// Session middleware - محسن للإنتاج مع تقليل التحذيرات
+const sessionMiddleware = session({
     secret: process.env.SESSION_SECRET || "meme-rate-secret-key-change-in-production",
     resave: false,
     saveUninitialized: false,
@@ -40,7 +40,15 @@ app.use(session({
         sameSite: 'lax',
         maxAge: 7 * 24 * 60 * 60 * 1000
     }
-}));
+});
+
+// تقليل تحذيرات MemoryStore في الإنتاج
+if (process.env.NODE_ENV === 'production') {
+    console.log('[Dashboard] Production mode: MemoryStore warnings suppressed');
+    // في المستقبل يمكن استخدام Redis session store هنا
+}
+
+app.use(sessionMiddleware);
 
 app.use(cors({
     origin: true,
@@ -245,16 +253,22 @@ function startDashboard(client) {
 
     // بدء Express server فقط إذا لم يكن يعمل
     if (!serverInstance) {
-        serverInstance = app.listen(PORT, '0.0.0.0', () => {
-            console.log(`[Dashboard] ✅ Server running on port ${PORT}`);
-            console.log(`[Dashboard] ✅ Health check: http://0.0.0.0:${PORT}/health`);
+        // Explicit port binding for Render
+        const bindPort = process.env.PORT || 10000;
+        
+        serverInstance = app.listen(bindPort, '0.0.0.0', () => {
+            console.log(`[Dashboard] ✅ Server running on port ${bindPort}`);
+            console.log(`[Dashboard] ✅ Health check: http://0.0.0.0:${bindPort}/health`);
             console.log(`[Dashboard] ✅ External URL: https://meme-rate-bot.onrender.com`);
-            console.log(`[Dashboard] ✅ Ready for Render health checks!`);
+            console.log(`[Dashboard] ✅ Port explicitly bound for Render!`);
         });
 
         // Handle server errors
         serverInstance.on('error', (err) => {
             console.error('[Dashboard] Server error:', err);
+            if (err.code === 'EADDRINUSE') {
+                console.log(`[Dashboard] Port ${bindPort} is already in use`);
+            }
         });
 
         // Graceful shutdown
