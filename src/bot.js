@@ -569,9 +569,3 @@ client.on("messageCreate", async (message) => {
 
 client.login(token);
 
-// Start dashboard after successful login
-client.once('ready', () => {
-    console.log('[Bot] Discord client ready, starting dashboard...');
-    startDashboard(client);
-});
-
