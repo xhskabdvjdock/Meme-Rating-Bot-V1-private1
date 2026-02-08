@@ -252,8 +252,10 @@ app.get("/dashboard", (req, res) => {
 let serverInstance = null;
 
 function startDashboard(client) {
-    discordClient = client;
-    console.log("[Dashboard] Discord client connected");
+    if (client) {
+        discordClient = client;
+        console.log("[Dashboard] Discord client connected");
+    }
 
     // بدء Express server فقط إذا لم يكن يعمل
     if (!serverInstance) {
