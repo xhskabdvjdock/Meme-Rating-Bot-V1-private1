@@ -88,6 +88,7 @@ router.get("/callback", async (req, res) => {
 
         console.log(`[Auth] User logged in: ${userData.username} (${userData.id})`);
         console.log(`[Auth] Guilds count: ${guildsData.length}`);
+        console.log("[Auth] Session data saved:", req.session.user);
 
         // حفظ الجلسة قبل إعادة التوجيه
         req.session.save((err) => {
@@ -96,6 +97,7 @@ router.get("/callback", async (req, res) => {
                 return res.redirect("/?error=session_error");
             }
             console.log("[Auth] Session saved successfully, redirecting to dashboard");
+            console.log("[Auth] Redirecting to:", "/dashboard");
             res.redirect("/dashboard");
         });
 
@@ -108,9 +110,16 @@ router.get("/callback", async (req, res) => {
 // تسجيل الخروج
 router.get("/logout", (req, res) => {
     const username = req.session.user?.username;
-    req.session.destroy();
-    console.log(`[Auth] User logged out: ${username}`);
-    res.redirect("/");
+    console.log(`[Auth] Logging out user: ${username}`);
+    
+    req.session.destroy((err) => {
+        if (err) {
+            console.error("[Auth] Session destroy error:", err);
+        } else {
+            console.log("[Auth] Session destroyed successfully");
+        }
+        res.redirect("/");
+    });
 });
 
 // الحصول على معلومات المستخدم الحالي
@@ -119,10 +128,14 @@ router.get("/api/user", (req, res) => {
     console.log("[Auth] Session ID:", req.sessionID);
     console.log("[Auth] Session user:", req.session.user ? req.session.user.username : "none");
     console.log("[Auth] Cookies:", req.headers.cookie);
+    console.log("[Auth] Session data:", req.session);
 
     if (!req.session.user) {
+        console.log("[Auth] No user in session, returning loggedIn: false");
         return res.json({ loggedIn: false });
     }
+    
+    console.log("[Auth] User found in session:", req.session.user.username);
     res.json({
         loggedIn: true,
         user: req.session.user
