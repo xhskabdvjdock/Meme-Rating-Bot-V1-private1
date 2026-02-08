@@ -83,7 +83,7 @@ app.get("/health", (req, res) => {
 });
 
 // Root endpoint - مهم أيضاً لـ Render
-app.get("/", (req, res) => {
+app.get("/api", (req, res) => {
     res.status(200).json({
         status: "Meme Rate Bot Dashboard",
         health: "/health",
@@ -264,11 +264,7 @@ function startDashboard(client) {
         console.log(`[Dashboard] Environment PORT: ${process.env.PORT}`);
         
         // Force port binding with timeout
-        serverInstance = app.listen(bindPort, '0.0.0.0', {
-            keepAlive: true,
-            keepAliveTimeout: 65000,
-            headersTimeout: 66000
-        }, () => {
+        serverInstance = app.listen(bindPort, '0.0.0.0', () => {
             console.log(`[Dashboard] ✅ Server successfully running on port ${bindPort}`);
             console.log(`[Dashboard] ✅ Health check: http://0.0.0.0:${bindPort}/health`);
             console.log(`[Dashboard] ✅ External URL: https://meme-rating-bot-v1-private.onrender.com`);
