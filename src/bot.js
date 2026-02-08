@@ -48,10 +48,6 @@ const {
   getRateLimitReset,
 } = require("./downloadStore");
 
-// Start dashboard immediately for Render port detection (without Discord client)
-console.log('[Bot] Starting dashboard immediately for port binding...');
-startDashboard(null);
-
 const token = process.env.DISCORD_TOKEN;
 if (!token) {
   console.error("Missing DISCORD_TOKEN. Put it in ./env (see env.example).");
