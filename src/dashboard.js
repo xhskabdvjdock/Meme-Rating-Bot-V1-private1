@@ -13,6 +13,10 @@ const downloadQueue = require("./downloadQueue");
 const app = express();
 const PORT = process.env.PORT || 10000;
 
+// Force port binding for Render
+console.log(`[Dashboard] Initializing with PORT: ${PORT}`);
+console.log(`[Dashboard] Environment NODE_ENV: ${process.env.NODE_ENV}`);
+
 // مسار مجلد الداشبورد
 const dashboardPath = path.resolve(__dirname, "..", "dashboard");
 console.log("[Dashboard] Static files path:", dashboardPath);
@@ -257,12 +261,23 @@ function startDashboard(client) {
         const bindPort = process.env.PORT || 10000;
         
         console.log(`[Dashboard] Attempting to bind to port ${bindPort}...`);
+        console.log(`[Dashboard] Environment PORT: ${process.env.PORT}`);
         
-        serverInstance = app.listen(bindPort, '0.0.0.0', () => {
+        // Force port binding with timeout
+        serverInstance = app.listen(bindPort, '0.0.0.0', {
+            keepAlive: true,
+            keepAliveTimeout: 65000,
+            headersTimeout: 66000
+        }, () => {
             console.log(`[Dashboard] ✅ Server successfully running on port ${bindPort}`);
             console.log(`[Dashboard] ✅ Health check: http://0.0.0.0:${bindPort}/health`);
             console.log(`[Dashboard] ✅ External URL: https://meme-rating-bot-v1-private.onrender.com`);
             console.log(`[Dashboard] ✅ Port bound and ready for Render!`);
+            
+            // Test the health endpoint
+            setTimeout(() => {
+                console.log(`[Dashboard] Testing health endpoint...`);
+            }, 1000);
         });
 
         // Handle server errors
