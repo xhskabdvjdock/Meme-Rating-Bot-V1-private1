@@ -16,6 +16,7 @@ const PORT = process.env.PORT || 3000;
 // مسار مجلد الداشبورد
 const dashboardPath = path.resolve(__dirname, "..", "dashboard");
 console.log("[Dashboard] Static files path:", dashboardPath);
+console.log("[Dashboard] __dirname:", __dirname);
 
 // التحقق من وجود الملفات
 const indexPath = path.join(dashboardPath, "index.html");
@@ -46,7 +47,9 @@ app.use(cors({
     credentials: true
 }));
 app.use(express.json());
-app.use(express.static(dashboardPath));
+app.use(express.static(dashboardPath, {
+    maxAge: '1h'
+}));
 
 // Auth routes
 app.use("/auth", authRoutes);
