@@ -71,6 +71,19 @@ const client = new Client({
   },
 });
 
+// Add debug events
+client.on('debug', (info) => {
+  console.log('[Bot Debug]', info);
+});
+
+client.on('warn', (info) => {
+  console.log('[Bot Warning]', info);
+});
+
+client.on('error', (error) => {
+  console.error('[Bot Error]', error);
+});
+
 // لتفادي جدولة نفس الرسالة أكثر من مرة أثناء التشغيل
 const scheduled = new Map(); // messageId -> timeoutId
 
@@ -575,12 +588,19 @@ client.on("messageCreate", async (message) => {
   scheduleFinalize(guildId, message.channelId, message.id, endsAtMs, createdAtMs);
 });
 
-client.login(token).catch(err => {
+console.log("[Bot] Attempting to login to Discord...");
+client.login(token).then(() => {
+  console.log("[Bot] Login promise resolved, waiting for 'ready' event...");
+}).catch(err => {
   console.error("[Bot] Failed to login:", err);
   if (err.code === 'TOKEN_INVALID') {
     console.error("[Bot] Discord token is invalid!");
   } else if (err.code === 'DISALLOWED_INTENTS') {
     console.error("[Bot] Bot intents are not allowed!");
+  } else {
+    console.error("[Bot] Unknown error:", err.message);
   }
 });
+
+console.log("[Bot] Login initiated, waiting for connection...");
 
