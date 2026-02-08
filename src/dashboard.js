@@ -301,3 +301,9 @@ function startDashboard(client) {
 }
 
 module.exports = { startDashboard };
+
+// Auto-start server if this file is run directly
+if (require.main === module) {
+    console.log('[Dashboard] Starting standalone server...');
+    startDashboard(null);
+}
