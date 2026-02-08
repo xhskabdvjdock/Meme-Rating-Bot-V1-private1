@@ -95,6 +95,7 @@ app.get("/api", (req, res) => {
 // الحصول على معلومات السيرفرات
 app.get("/api/guilds", (req, res) => {
     if (!discordClient) {
+        console.log("[Dashboard] Bot not connected yet, returning empty guilds list");
         return res.json([]); // إرجاع مصفوفة فارغة إذا لم يتصل البوت بعد
     }
     const guilds = discordClient.guilds.cache.map(g => ({
@@ -103,6 +104,7 @@ app.get("/api/guilds", (req, res) => {
         icon: g.iconURL({ size: 128 }),
         memberCount: g.memberCount,
     }));
+    console.log(`[Dashboard] Returning ${guilds.length} guilds`);
     res.json(guilds);
 });
 
