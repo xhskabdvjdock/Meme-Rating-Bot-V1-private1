@@ -8,14 +8,18 @@ let config = {};
 let currentUser = null;
 let botGuilds = [];
 
+// Guild-specific data storage to prevent mixing
+const guildData = new Map(); // guildId -> { channels, config, etc. }
+
 // API Base
-const API = '';
+const API = window.location.origin;
 
 // DOM Elements
 const serversPage = document.getElementById('servers-page');
 const memeratePage = document.getElementById('memerate-page');
 const gifPage = document.getElementById('gif-page');
 const streakPage = document.getElementById('streak-page');
+const downloadPage = document.getElementById('download-page');
 const pageTitle = document.getElementById('page-title');
 const serversList = document.getElementById('servers-list');
 const subNav = document.getElementById('sub-nav');
@@ -198,6 +202,16 @@ function renderServers() {
 
 async function openServer(guildId) {
     console.log("[Dashboard] Opening server:", guildId);
+    
+    // Check if we're already on this server
+    if (currentGuildId === guildId) {
+        console.log("[Dashboard] Already on this server, skipping");
+        return;
+    }
+    
+    // Clear previous state
+    clearCurrentState();
+    
     currentGuildId = guildId;
 
     // البحث في botGuilds أو userGuilds
@@ -220,25 +234,86 @@ async function openServer(guildId) {
     // Hide servers page, show system pages
     serversPage.classList.remove('active');
 
-    // Load data
-    await Promise.all([
-        loadChannels(),
-        loadConfig()
-    ]);
+    // Show loading state
+    showLoadingState();
 
-    // Show default system (meme rate)
-    showSystem('memerate');
+    // Load data for this specific server
+    try {
+        await Promise.all([
+            loadChannelsForGuild(guildId),
+            loadConfigForGuild(guildId)
+        ]);
+
+        hideLoadingState();
+        
+        // Show default system (meme rate)
+        showSystem('memerate');
+    } catch (error) {
+        console.error('[Dashboard] Error loading server data:', error);
+        hideLoadingState();
+        showToast('خطأ في تحميل بيانات السيرفر', 'error');
+    }
+}
+
+function clearCurrentState() {
+    // Reset all server-specific data
+    channels = [];
+    config = {};
+    currentSystem = 'memerate';
+    
+    // Clear any pending operations
+    // This prevents data from previous server from affecting new one
+    console.log('[Dashboard] Cleared previous server state');
+}
+
+function showLoadingState() {
+    // Show loading indicator
+    const loadingHtml = `
+        <div class="loading-state">
+            <div class="loading-spinner"></div>
+            <p>جاري تحميل بيانات السيرفر...</p>
+        </div>
+    `;
+    
+    // Hide all system pages and show loading
+    memeratePage.classList.remove('active');
+    gifPage.classList.remove('active');
+    streakPage.classList.remove('active');
+    downloadPage.classList.remove('active');
+    
+    // Temporarily show loading in the main content area
+    const mainContent = document.querySelector('.main-content') || document.body;
+    if (!document.getElementById('temp-loading')) {
+        const loadingDiv = document.createElement('div');
+        loadingDiv.id = 'temp-loading';
+        loadingDiv.innerHTML = loadingHtml;
+        loadingDiv.className = 'loading-overlay';
+        mainContent.appendChild(loadingDiv);
+    }
+}
+
+function hideLoadingState() {
+    // Remove loading indicator
+    const loadingDiv = document.getElementById('temp-loading');
+    if (loadingDiv) {
+        loadingDiv.remove();
+    }
 }
 
 function showServers() {
     pageTitle.textContent = 'السيرفرات';
     subNav.style.display = 'none';
 
+    // Clear current server state when going back to server list
+    clearCurrentState();
+    currentGuildId = null;
+
     // Hide all pages
     serversPage.classList.add('active');
     memeratePage.classList.remove('active');
     gifPage.classList.remove('active');
     streakPage.classList.remove('active');
+    downloadPage.classList.remove('active');
 
     // Reset nav items
     document.querySelectorAll('.sub-nav .nav-item').forEach(el => el.classList.remove('active'));
@@ -252,6 +327,7 @@ function showSystem(system) {
     memeratePage.classList.remove('active');
     gifPage.classList.remove('active');
     streakPage.classList.remove('active');
+    downloadPage.classList.remove('active');
 
     // Show selected system
     if (system === 'memerate') {
@@ -263,6 +339,11 @@ function showSystem(system) {
         streakPage.classList.add('active');
         loadStreakChannels();
         loadStreakLeaderboard();
+    } else if (system === 'download') {
+        downloadPage.classList.add('active');
+        loadDownloadConfig();
+        loadDownloadStats();
+        refreshQueueStatus();
     }
 
     // Update nav
@@ -279,41 +360,94 @@ function showPage(page) {
 
 // =============== Config ===============
 
-async function loadConfig() {
-    const guildIdToLoad = currentGuildId; // حفظ الـ guildId الحالي
+async function loadConfigForGuild(guildId) {
     try {
-        const res = await fetch(`${API}/api/guilds/${guildIdToLoad}/config`);
+        console.log(`[Dashboard] Loading config for guild: ${guildId}`);
+        const res = await fetch(`${API}/api/guilds/${guildId}/config`);
+        
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+        
         const fetchedConfig = await res.json();
 
-        // التحقق إن المستخدم ما غيّر السيرفر أثناء التحميل
-        if (currentGuildId !== guildIdToLoad) {
-            return; // المستخدم غيّر السيرفر، نتجاهل هذا الرد
+        // Only update if we're still on the same guild
+        if (currentGuildId !== guildId) {
+            console.log(`[Dashboard] Guild changed during config load, ignoring response`);
+            return;
         }
 
         config = fetchedConfig;
+        console.log(`[Dashboard] Config loaded for guild ${guildId}:`, config);
 
-        // Meme Rate settings
-        document.getElementById('mode-select').value = config.mode || 'timed';
-        document.getElementById('duration-input').value = config.durationMinutes || 10;
-        document.getElementById('interval-input').value = config.checkIntervalSeconds || 30;
-        document.getElementById('positive-emoji').value = config.emojis?.positive || '✅';
-        document.getElementById('negative-emoji').value = config.emojis?.negative || '❌';
-
-        // GIF settings
-        document.getElementById('gif-auto-select').value = config.gifAutoEnabled !== false ? 'true' : 'false';
-        document.getElementById('gif-quality-select').value = config.gifQuality || 'medium';
-        document.getElementById('gif-duration-input').value = config.gifDuration || 5;
-
-        updateIntervalVisibility();
-        renderEnabledChannels();
-        renderChannelSelects();
-        renderGifChannels();
-        renderGifChannelSelect();
+        // Update UI with new config
+        updateConfigUI();
+        
     } catch (err) {
-        console.error('Error loading config:', err);
-        if (currentGuildId === guildIdToLoad) {
+        console.error(`[Dashboard] Error loading config for guild ${guildId}:`, err);
+        if (currentGuildId === guildId) {
             showToast('خطأ في تحميل الإعدادات', 'error');
         }
+    }
+}
+
+function updateConfigUI() {
+    // Meme Rate settings
+    document.getElementById('mode-select').value = config.mode || 'timed';
+    document.getElementById('duration-input').value = config.durationMinutes || 10;
+    document.getElementById('interval-input').value = config.checkIntervalSeconds || 30;
+    document.getElementById('positive-emoji').value = config.emojis?.positive || '✅';
+    document.getElementById('negative-emoji').value = config.emojis?.negative || '❌';
+
+    // GIF settings
+    document.getElementById('gif-auto-select').value = config.gifAutoEnabled !== false ? 'true' : 'false';
+    document.getElementById('gif-quality-select').value = config.gifQuality || 'medium';
+    document.getElementById('gif-duration-input').value = config.gifDuration || 5;
+
+    updateIntervalVisibility();
+    renderEnabledChannels();
+    renderChannelSelects();
+    renderGifChannels();
+    renderGifChannelSelect();
+}
+
+async function loadChannelsForGuild(guildId) {
+    try {
+        console.log(`[Dashboard] Loading channels for guild: ${guildId}`);
+        const res = await fetch(`${API}/api/guilds/${guildId}/channels`);
+        
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+        
+        const fetchedChannels = await res.json();
+
+        // Only update if we're still on the same guild
+        if (currentGuildId === guildId) {
+            channels = fetchedChannels;
+            console.log(`[Dashboard] Channels loaded for guild ${guildId}:`, channels.length);
+        } else {
+            console.log(`[Dashboard] Guild changed during channels load, ignoring response`);
+        }
+    } catch (err) {
+        console.error(`[Dashboard] Error loading channels for guild ${guildId}:`, err);
+        if (currentGuildId === guildId) {
+            channels = [];
+            showToast('خطأ في تحميل القنوات', 'error');
+        }
+    }
+}
+
+// Legacy functions - kept for compatibility but now use guild-specific versions
+async function loadConfig() {
+    if (currentGuildId) {
+        await loadConfigForGuild(currentGuildId);
+    }
+}
+
+async function loadChannels() {
+    if (currentGuildId) {
+        await loadChannelsForGuild(currentGuildId);
     }
 }
 
@@ -322,27 +456,34 @@ function updateIntervalVisibility() {
     document.getElementById('interval-group').style.display = mode === 'continuous' ? 'block' : 'none';
 }
 
-document.getElementById('mode-select').addEventListener('change', updateIntervalVisibility);
-
-async function loadChannels() {
-    const guildIdToLoad = currentGuildId; // حفظ الـ guildId الحالي
-    try {
-        const res = await fetch(`${API}/api/guilds/${guildIdToLoad}/channels`);
-        const fetchedChannels = await res.json();
-
-        // التحقق إن المستخدم ما غيّر السيرفر أثناء التحميل
-        if (currentGuildId === guildIdToLoad) {
-            channels = fetchedChannels;
-        }
-    } catch (err) {
-        console.error('Error loading channels:', err);
-        if (currentGuildId === guildIdToLoad) {
-            channels = [];
-        }
-    }
+// Add event listener if element exists
+if (document.getElementById('mode-select')) {
+    document.getElementById('mode-select').addEventListener('change', updateIntervalVisibility);
 }
 
-// =============== Meme Rate Channels ===============
+// Toast notification system
+function showToast(message, type = 'success') {
+    // Remove existing toasts
+    const existingToast = document.querySelector('.toast');
+    if (existingToast) {
+        existingToast.remove();
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    
+    document.body.appendChild(toast);
+    
+    // Auto remove after 3 seconds
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.remove();
+        }
+    }, 3000);
+}
+
+// =============== Helper Functions ===============
 
 function renderEnabledChannels() {
     const list = document.getElementById('channels-list');
@@ -379,6 +520,11 @@ function renderChannelSelects() {
 }
 
 async function saveConfig() {
+    if (!currentGuildId) {
+        showToast('لم يتم تحديد سيرفر', 'error');
+        return;
+    }
+
     try {
         const updates = {
             mode: document.getElementById('mode-select').value,
@@ -390,54 +536,97 @@ async function saveConfig() {
             }
         };
 
-        await fetch(`${API}/api/guilds/${currentGuildId}/config`, {
+        console.log(`[Dashboard] Saving config for guild ${currentGuildId}:`, updates);
+
+        const res = await fetch(`${API}/api/guilds/${currentGuildId}/config`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(updates)
         });
 
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+
+        const newConfig = await res.json();
+        
+        // Update local config with saved data
+        config = { ...config, ...newConfig };
+        
+        console.log(`[Dashboard] Config saved successfully for guild ${currentGuildId}`);
         showToast('تم حفظ الإعدادات', 'success');
-        await loadConfig();
+        
+        // Update UI to reflect saved changes
+        updateConfigUI();
+        
     } catch (err) {
-        console.error('Error saving config:', err);
-        showToast('خطأ في حفظ الإعدادات', 'error');
+        console.error('[Dashboard] Error saving config:', err);
+        showToast('خطأ في حفظ الإعدادات: ' + err.message, 'error');
     }
 }
 
 async function addChannel() {
+    if (!currentGuildId) {
+        showToast('لم يتم تحديد سيرفر', 'error');
+        return;
+    }
+
     const select = document.getElementById('add-channel-select');
     const channelId = select.value;
     if (!channelId) return;
 
     try {
         const newList = [...(config.enabledChannelIds || []), channelId];
-        await fetch(`${API}/api/guilds/${currentGuildId}/config`, {
+        
+        const res = await fetch(`${API}/api/guilds/${currentGuildId}/config`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ enabledChannelIds: newList })
         });
 
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+
+        const updatedConfig = await res.json();
+        config = { ...config, ...updatedConfig };
+        
+        renderEnabledChannels();
+        renderChannelSelects();
         showToast('تمت إضافة القناة', 'success');
-        await loadConfig();
     } catch (err) {
-        console.error('Error adding channel:', err);
+        console.error('[Dashboard] Error adding channel:', err);
         showToast('خطأ في إضافة القناة', 'error');
     }
 }
 
 async function removeChannel(channelId) {
+    if (!currentGuildId) {
+        showToast('لم يتم تحديد سيرفر', 'error');
+        return;
+    }
+
     try {
         const newList = (config.enabledChannelIds || []).filter(id => id !== channelId);
-        await fetch(`${API}/api/guilds/${currentGuildId}/config`, {
+        
+        const res = await fetch(`${API}/api/guilds/${currentGuildId}/config`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ enabledChannelIds: newList })
         });
 
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+
+        const updatedConfig = await res.json();
+        config = { ...config, ...updatedConfig };
+        
+        renderEnabledChannels();
+        renderChannelSelects();
         showToast('تمت إزالة القناة', 'success');
-        await loadConfig();
     } catch (err) {
-        console.error('Error removing channel:', err);
+        console.error('[Dashboard] Error removing channel:', err);
         showToast('خطأ في إزالة القناة', 'error');
     }
 }
@@ -597,19 +786,210 @@ async function removeGifChannel(channelId) {
     }
 }
 
-// =============== Toast ===============
+// =============== Download System ===============
 
-function showToast(message, type = '') {
-    const toast = document.getElementById('toast');
-    toast.textContent = message;
-    toast.className = `toast show ${type}`;
+async function loadDownloadConfig() {
+    if (!currentGuildId) return;
 
-    setTimeout(() => {
-        toast.className = 'toast';
-    }, 3000);
+    try {
+        const res = await fetch(`${API}/api/guilds/${currentGuildId}/download-config`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        
+        const downloadConfig = await res.json();
+
+        // Update UI with download config
+        document.getElementById('download-enabled-select').value = downloadConfig.enabled ? 'true' : 'false';
+        document.getElementById('download-quality-select').value = downloadConfig.defaultQuality || 'best';
+        document.getElementById('max-file-size-input').value = downloadConfig.maxFileSize || 100;
+        document.getElementById('auto-compress-select').value = downloadConfig.autoCompress !== false ? 'true' : 'false';
+
+        renderDownloadChannels();
+    } catch (err) {
+        console.error('[Dashboard] Error loading download config:', err);
+        showToast('خطأ في تحميل إعدادات التحميل', 'error');
+    }
 }
 
-// =============== Streak System ===============
+async function saveDownloadConfig() {
+    if (!currentGuildId) {
+        showToast('لم يتم تحديد سيرفر', 'error');
+        return;
+    }
+
+    try {
+        const updates = {
+            enabled: document.getElementById('download-enabled-select').value === 'true',
+            defaultQuality: document.getElementById('download-quality-select').value,
+            maxFileSize: parseInt(document.getElementById('max-file-size-input').value),
+            autoCompress: document.getElementById('auto-compress-select').value === 'true'
+        };
+
+        console.log(`[Dashboard] Saving download config for guild ${currentGuildId}:`, updates);
+
+        const res = await fetch(`${API}/api/guilds/${currentGuildId}/download-config`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates)
+        });
+
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+
+        showToast('تم حفظ إعدادات التحميل', 'success');
+    } catch (err) {
+        console.error('[Dashboard] Error saving download config:', err);
+        showToast('خطأ في حفظ إعدادات التحميل: ' + err.message, 'error');
+    }
+}
+
+function renderDownloadChannels() {
+    const list = document.getElementById('download-channels-list');
+    const enabledIds = config.downloadChannelIds || [];
+
+    if (enabledIds.length === 0) {
+        list.innerHTML = '<div class="empty-state">لا توجد قنوات مفعلة</div>';
+        return;
+    }
+
+    list.innerHTML = enabledIds.map(id => {
+        const channel = channels.find(c => c.id === id);
+        return `
+        <div class="channel-item">
+            <span># ${channel?.name || id}</span>
+            <button onclick="removeDownloadChannel('${id}')">×</button>
+        </div>
+    `;
+    }).join('');
+}
+
+function renderDownloadChannelSelect() {
+    const select = document.getElementById('add-download-channel-select');
+    const enabledIds = config.downloadChannelIds || [];
+    const availableChannels = channels.filter(c => !enabledIds.includes(c.id));
+
+    select.innerHTML = '<option value="">اختر قناة...</option>' +
+        availableChannels.map(c => `<option value="${c.id}"># ${c.name}</option>`).join('');
+}
+
+async function addDownloadChannel() {
+    if (!currentGuildId) {
+        showToast('لم يتم تحديد سيرفر', 'error');
+        return;
+    }
+
+    const select = document.getElementById('add-download-channel-select');
+    const channelId = select.value;
+    if (!channelId) return;
+
+    try {
+        const newList = [...(config.downloadChannelIds || []), channelId];
+        
+        const res = await fetch(`${API}/api/guilds/${currentGuildId}/download-config`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ downloadChannelIds: newList })
+        });
+
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+
+        const updatedConfig = await res.json();
+        config = { ...config, ...updatedConfig };
+        
+        renderDownloadChannels();
+        renderDownloadChannelSelect();
+        showToast('تمت إضافة قناة التحميل', 'success');
+    } catch (err) {
+        console.error('[Dashboard] Error adding download channel:', err);
+        showToast('خطأ في إضافة القناة', 'error');
+    }
+}
+
+async function removeDownloadChannel(channelId) {
+    if (!currentGuildId) {
+        showToast('لم يتم تحديد سيرفر', 'error');
+        return;
+    }
+
+    try {
+        const newList = (config.downloadChannelIds || []).filter(id => id !== channelId);
+        
+        const res = await fetch(`${API}/api/guilds/${currentGuildId}/download-config`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ downloadChannelIds: newList })
+        });
+
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+
+        const updatedConfig = await res.json();
+        config = { ...config, ...updatedConfig };
+        
+        renderDownloadChannels();
+        renderDownloadChannelSelect();
+        showToast('تمت إزالة قناة التحميل', 'success');
+    } catch (err) {
+        console.error('[Dashboard] Error removing download channel:', err);
+        showToast('خطأ في إزالة القناة', 'error');
+    }
+}
+
+async function loadDownloadStats() {
+    if (!currentGuildId) return;
+
+    try {
+        const res = await fetch(`${API}/api/guilds/${currentGuildId}/download-stats`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        
+        const stats = await res.json();
+
+        // Update stats display
+        document.getElementById('downloads-today').textContent = stats.today || 0;
+        document.getElementById('downloads-week').textContent = stats.week || 0;
+        document.getElementById('downloads-total').textContent = stats.total || 0;
+        document.getElementById('data-saved').textContent = (stats.dataSaved || 0).toFixed(1) + ' GB';
+    } catch (err) {
+        console.error('[Dashboard] Error loading download stats:', err);
+        // Set default values on error
+        document.getElementById('downloads-today').textContent = '0';
+        document.getElementById('downloads-week').textContent = '0';
+        document.getElementById('downloads-total').textContent = '0';
+        document.getElementById('data-saved').textContent = '0 GB';
+    }
+}
+
+async function refreshQueueStatus() {
+    if (!currentGuildId) return;
+
+    try {
+        const res = await fetch(`${API}/api/guilds/${currentGuildId}/download-queue`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        
+        const queueStatus = await res.json();
+
+        // Update queue status display
+        document.getElementById('active-downloads').textContent = queueStatus.active || 0;
+        document.getElementById('pending-downloads').textContent = queueStatus.pending || 0;
+        document.getElementById('total-downloads').textContent = queueStatus.total || 0;
+    } catch (err) {
+        console.error('[Dashboard] Error refreshing queue status:', err);
+        // Set default values on error
+        document.getElementById('active-downloads').textContent = '0';
+        document.getElementById('pending-downloads').textContent = '0';
+        document.getElementById('total-downloads').textContent = '0';
+    }
+}
+
+// Auto-refresh queue status every 30 seconds
+setInterval(() => {
+    if (currentSystem === 'download' && currentGuildId) {
+        refreshQueueStatus();
+    }
+}, 30000);
 
 async function loadStreakChannels() {
     if (!config.streakChannelIds) {

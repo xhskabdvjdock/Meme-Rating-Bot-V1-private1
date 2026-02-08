@@ -6,7 +6,9 @@ const session = require("express-session");
 const { getGuildConfig, setGuildConfig } = require("./configStore");
 const { getLeaderboard, resetUserStats, resetGuildStats } = require("./statsStore");
 const { getStreakLeaderboard, getStreak, getAllGuildStreaks } = require("./streakStore");
+const { getDownloadConfig, setDownloadConfig } = require("./downloadConfigStore");
 const authRoutes = require("./auth");
+const downloadQueue = require("./downloadQueue");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -29,8 +31,8 @@ app.set('trust proxy', 1);
 // Session middleware
 app.use(session({
     secret: process.env.SESSION_SECRET || "meme-rate-secret-key-change-in-production",
-    resave: true,
-    saveUninitialized: true,
+    resave: false,
+    saveUninitialized: false,
     cookie: {
         secure: false, // مؤقتاً معطل للتجربة
         httpOnly: true,
@@ -48,7 +50,6 @@ app.use(express.static(dashboardPath));
 
 // Auth routes
 app.use("/auth", authRoutes);
-app.use(authRoutes); // للـ /api/user routes
 
 // متغير لتخزين الـ Discord client
 let discordClient = null;
@@ -156,9 +157,43 @@ app.get("/api/guilds/:guildId/all-streaks", (req, res) => {
     res.json(streaks);
 });
 
-// Route للصفحة الرئيسية - تعرض صفحة الهبوط
-app.get("/", (req, res) => {
-    res.sendFile(path.join(dashboardPath, "landing.html"));
+// =============== Download System API ===============
+
+// الحصول على إعدادات التحميل لسيرفر
+app.get("/api/guilds/:guildId/download-config", (req, res) => {
+    const config = getDownloadConfig(req.params.guildId);
+    res.json(config);
+});
+
+// تحديث إعدادات التحميل لسيرفر
+app.patch("/api/guilds/:guildId/download-config", (req, res) => {
+    const guildId = req.params.guildId;
+    const updates = req.body;
+    const newConfig = setDownloadConfig(guildId, updates);
+    res.json(newConfig);
+});
+
+// الحصول على إحصائيات التحميل
+app.get("/api/guilds/:guildId/download-stats", (req, res) => {
+    // Mock stats - في الإصدار الحقيقي، هذه البيانات ستأتي من قاعدة البيانات
+    const stats = {
+        today: Math.floor(Math.random() * 50),
+        week: Math.floor(Math.random() * 200),
+        total: Math.floor(Math.random() * 1000),
+        dataSaved: Math.random() * 50 // GB
+    };
+    res.json(stats);
+});
+
+// الحصول على حالة طابور التحميل
+app.get("/api/guilds/:guildId/download-queue", (req, res) => {
+    // Mock queue status - في الإصدار الحقيقي، هذه البيانات ستأتي من downloadQueue
+    const queueStatus = downloadQueue.getStatus();
+    res.json({
+        active: queueStatus.active,
+        pending: queueStatus.queued,
+        total: queueStatus.total
+    });
 });
 
 // Catch-all middleware - يجب أن يكون آخر middleware
@@ -174,6 +209,16 @@ app.use((req, res, next) => {
     }
     // وإلا أرسل صفحة الهبوط
     res.sendFile(path.join(dashboardPath, "landing.html"));
+});
+
+// Route للصفحة الرئيسية - تعرض صفحة الهبوط
+app.get("/", (req, res) => {
+    res.sendFile(path.join(dashboardPath, "landing.html"));
+});
+
+// Route للوحة التحكم
+app.get("/dashboard", (req, res) => {
+    res.sendFile(path.join(dashboardPath, "index.html"));
 });
 
 // متغير لحفظ الـ server instance

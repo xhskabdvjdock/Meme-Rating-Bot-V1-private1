@@ -40,7 +40,7 @@ function renderLoggedIn(user) {
 
     // Header user info
     headerActions.innerHTML = `
-        <a href="index.html" class="user-btn">
+        <a href="/dashboard" class="user-btn">
             ${avatarUrl
             ? `<img src="${avatarUrl}" class="user-avatar-small" alt="">`
             : `<div class="user-avatar-placeholder-small">${user.username.charAt(0).toUpperCase()}</div>`
@@ -54,7 +54,7 @@ function renderLoggedIn(user) {
         <a href="${BOT_INVITE_URL}" target="_blank" class="btn-success">
             ➕ إضافة البوت
         </a>
-        <a href="index.html" class="btn-accent">
+        <a href="/dashboard" class="btn-accent">
             🎛️ لوحة التحكم
         </a>
         <a href="/auth/logout" class="btn-secondary">

@@ -11,7 +11,7 @@ const fs = require('fs');
 
 // إعدادات
 const TEMP_DIR = path.join(__dirname, '..', 'temp');
-const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB Discord limit
+const MAX_FILE_SIZE = 678 * 1024 * 1024; // 100MB limit for large files
 
 // أنماط الروابط المدعومة
 const URL_PATTERNS = {
@@ -115,6 +115,60 @@ async function getVideoInfo(url) {
 }
 
 /**
+ * التحقق من حجم الملف قبل التحميل
+ */
+async function checkFileSize(url, format = 'mp4', quality = 'best') {
+    try {
+        console.log(`[yt-dlp] Checking file size: ${url} (${format}, ${quality})`);
+
+        let formatFilter;
+
+        // Audio-only mode
+        if (format === 'mp3') {
+            formatFilter = 'bestaudio';
+        } else {
+            // Video mode with quality selection
+            if (quality === 'best') {
+                formatFilter = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best';
+            } else if (quality === '720') {
+                formatFilter = `bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]`;
+            } else if (quality === '480') {
+                formatFilter = `bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best[height<=480]`;
+            } else if (quality === '360') {
+                formatFilter = `bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best[height<=360][ext=mp4]/best[height<=360]`;
+            }
+        }
+
+        const info = await ytdlp(url, {
+            dumpSingleJson: true,
+            format: formatFilter,
+            noWarnings: true,
+            noCheckCertificate: true,
+            extractorArgs: 'youtube:player_client=android',
+        });
+
+        const filesize = info.filesize || info.filesize_approx || 0;
+        console.log(`[yt-dlp] Estimated file size: ${(filesize / 1024 / 1024).toFixed(2)}MB`);
+
+        return {
+            filesize: filesize,
+            title: info.title || 'video',
+            duration: info.duration || 0,
+            willExceedLimit: filesize > MAX_FILE_SIZE
+        };
+
+    } catch (error) {
+        console.error(`[yt-dlp] Failed to check file size:`, error.message);
+        return {
+            filesize: 0,
+            title: 'video',
+            duration: 0,
+            willExceedLimit: false
+        };
+    }
+}
+
+/**
  * تحميل الفيديو باستخدام yt-dlp
  */
 async function downloadVideo(url, format = 'mp4', quality = 'best') {
@@ -142,6 +196,7 @@ async function downloadVideo(url, format = 'mp4', quality = 'best') {
             options.extractAudio = true;
             options.audioFormat = 'mp3';
             options.audioQuality = '192K';
+            options.ffmpegLocation = 'C:\\ffmpeg-8.0.1-essentials_build\\bin';
         } else {
             // Video mode with quality selection
             if (quality === 'best') {
@@ -150,11 +205,14 @@ async function downloadVideo(url, format = 'mp4', quality = 'best') {
                 options.format = `bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]`;
             } else if (quality === '480') {
                 options.format = `bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best[height<=480]`;
+            } else if (quality === '360') {
+                options.format = `bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best[height<=360][ext=mp4]/best[height<=360]`;
             }
 
             // Merge to mp4
             options.mergeOutputFormat = 'mp4';
             options.remuxVideo = 'mp4';
+            options.ffmpegLocation = 'C:\\ffmpeg-8.0.1-essentials_build\\bin';
         }
 
         await ytdlp(url, options);
@@ -201,7 +259,8 @@ async function getDirectDownloadUrl(url, format = 'mp4', quality = 'best') {
 
         // Audio-only mode
         if (format === 'mp3') {
-            formatFilter = 'bestaudio';
+            formatFilter = 'bestaudio[ext=mp3]/bestaudio';
+            console.log(`[yt-dlp] Requesting MP3 format with filter: ${formatFilter}`);
         } else {
             // Video mode with quality selection
             if (quality === 'best') {
@@ -210,6 +269,8 @@ async function getDirectDownloadUrl(url, format = 'mp4', quality = 'best') {
                 formatFilter = `bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]`;
             } else if (quality === '480') {
                 formatFilter = `bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best[height<=480]`;
+            } else if (quality === '360') {
+                formatFilter = `bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best[height<=360][ext=mp4]/best[height<=360]`;
             }
         }
 
@@ -222,15 +283,74 @@ async function getDirectDownloadUrl(url, format = 'mp4', quality = 'best') {
             extractorArgs: 'youtube:player_client=android',
         });
 
-        // Get the direct URL
-        let directUrl = info.url;
+        // Get the direct URL - prioritize the format filter result
+        let directUrl = null;
 
-        // If it's a combination of video+audio, get the video URL
+        // First try to get URL from the format we requested
         if (info.requested_formats && info.requested_formats.length > 0) {
-            directUrl = info.requested_formats[0].url;
+            // Use the first requested format that matches our quality
+            const requestedFormat = info.requested_formats.find(f => 
+                f.ext === (format === 'mp3' ? 'mp3' : 'mp4')
+            );
+            if (requestedFormat) {
+                directUrl = requestedFormat.url;
+                const formatInfo = format === 'mp3' ? 
+                    `${requestedFormat.abr || 'unknown'}kbps MP3` : 
+                    `${requestedFormat.height || 'unknown'}p ${requestedFormat.ext}`;
+                console.log(`[yt-dlp] Using requested format: ${formatInfo}`);
+            }
         }
 
-        console.log(`[yt-dlp] Got direct URL (expires in ~6 hours)`);
+        // If no requested format, try to find matching format from all formats
+        if (!directUrl) {
+            if (format === 'mp3') {
+                // Find best audio format
+                const audioFormat = info.formats?.find(f => 
+                    f.acodec !== 'none' && (f.ext === 'mp3' || f.ext === 'm4a')
+                );
+                if (audioFormat) {
+                    directUrl = audioFormat.url;
+                    console.log(`[yt-dlp] Found audio format: ${audioFormat.abr || 'unknown'}kbps ${audioFormat.ext}`);
+                }
+            } else if (info.formats && info.formats.length > 0) {
+                // Find best format matching our criteria
+                let targetFormat = null;
+                
+                if (quality === 'best') {
+                    // Find best mp4 format
+                    targetFormat = info.formats.find(f => 
+                        f.ext === 'mp4' && f.vcodec !== 'none' && f.acodec !== 'none'
+                    ) || info.formats.find(f => f.ext === 'mp4');
+                } else if (quality === '720') {
+                    targetFormat = info.formats.find(f => 
+                        f.height <= 720 && f.ext === 'mp4' && f.vcodec !== 'none'
+                    );
+                } else if (quality === '480') {
+                    targetFormat = info.formats.find(f => 
+                        f.height <= 480 && f.ext === 'mp4' && f.vcodec !== 'none'
+                    );
+                } else if (quality === '360') {
+                    targetFormat = info.formats.find(f => 
+                        f.height <= 360 && f.ext === 'mp4' && f.vcodec !== 'none'
+                    );
+                }
+                
+                if (targetFormat) {
+                    directUrl = targetFormat.url;
+                    console.log(`[yt-dlp] Found matching format: ${targetFormat.height}p ${targetFormat.ext} (${targetFormat.vcodec})`);
+                } else {
+                    console.log(`[yt-dlp] No matching format found for quality ${quality}`);
+                }
+            }
+        }
+
+        // Fallback to default URL
+        if (!directUrl) {
+            directUrl = info.url;
+            console.log(`[yt-dlp] Using fallback URL for quality ${quality}`);
+        }
+
+        console.log(`[yt-dlp] Got direct URL for ${quality} quality (expires in ~6 hours)`);
 
         return {
             url: directUrl,
@@ -251,6 +371,61 @@ async function getDirectDownloadUrl(url, format = 'mp4', quality = 'best') {
 async function convertToMp3(videoPath) {
     // yt-dlp handles this automatically
     return videoPath;
+}
+
+/**
+ * ضغط الفيديو تلقائياً للملفات الكبيرة
+ */
+async function autoCompressVideo(filePath, targetSizeMB = 50) {
+    try {
+        const currentSize = getFileSize(filePath);
+        const currentSizeMB = currentSize / 1024 / 1024;
+        
+        console.log(`[Compression] Current size: ${currentSizeMB.toFixed(2)}MB, Target: ${targetSizeMB}MB`);
+        
+        if (currentSizeMB <= targetSizeMB) {
+            console.log('[Compression] File size is acceptable, no compression needed');
+            return filePath;
+        }
+
+        const filename = `compressed_${Date.now()}.mp4`;
+        const outputPath = path.join(TEMP_DIR, filename);
+        
+        // Use ffmpeg for compression (more reliable than yt-dlp for this task)
+        const ffmpeg = require('fluent-ffmpeg');
+        ffmpeg.setFfmpegPath('C:\\ffmpeg-8.0.1-essentials_build\\bin\\ffmpeg.exe');
+        ffmpeg.setFfprobePath('C:\\ffmpeg-8.0.1-essentials_build\\bin\\ffprobe.exe');
+        
+        return new Promise((resolve, reject) => {
+            ffmpeg(filePath)
+                .output(outputPath)
+                .videoCodec('libx264')
+                .audioCodec('aac')
+                .audioBitrate('128k')
+                .videoBitrate('1000k') // Target 1Mbps
+                .size('?x720') // Max height 720p
+                .format('mp4')
+                .on('end', () => {
+                    console.log('[Compression] Compression completed');
+                    const compressedSize = getFileSize(outputPath);
+                    const compressedSizeMB = compressedSize / 1024 / 1024;
+                    console.log(`[Compression] Compressed size: ${compressedSizeMB.toFixed(2)}MB`);
+                    
+                    // Delete original file
+                    deleteFile(filePath);
+                    resolve(outputPath);
+                })
+                .on('error', (err) => {
+                    console.error('[Compression] Error:', err.message);
+                    resolve(filePath); // Return original if compression fails
+                })
+                .run();
+        });
+        
+    } catch (error) {
+        console.error('[Compression] Error:', error.message);
+        return filePath; // Return original if compression fails
+    }
 }
 
 /**
@@ -295,12 +470,13 @@ function cleanupTempDir() {
     try {
         const files = fs.readdirSync(TEMP_DIR);
         const now = Date.now();
-        const maxAge = 60 * 60 * 1000; // 1 hour
+        const maxAge = 30 * 60 * 1000; // 30 دقيقة فقط
 
         for (const file of files) {
             const filePath = path.join(TEMP_DIR, file);
             const stats = fs.statSync(filePath);
 
+            // حذف الملفات الأقدم من 30 دقيقة
             if (now - stats.mtimeMs > maxAge) {
                 deleteFile(filePath);
             }
@@ -310,16 +486,18 @@ function cleanupTempDir() {
     }
 }
 
-// Auto-cleanup every 30 minutes
-setInterval(cleanupTempDir, 30 * 60 * 1000);
+// Auto-cleanup كل 10 دقائق (أسرع تنظيف)
+setInterval(cleanupTempDir, 10 * 60 * 1000);
 
 module.exports = {
     detectVideoUrls,
     getVideoInfo,
+    checkFileSize,
     downloadVideo,
     getDirectDownloadUrl,
     convertToMp3,
     compressVideo,
+    autoCompressVideo,
     getFileSize,
     deleteFile,
     getPlatformName,

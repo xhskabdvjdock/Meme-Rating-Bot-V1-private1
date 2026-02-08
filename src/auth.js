@@ -95,7 +95,8 @@ router.get("/callback", async (req, res) => {
                 console.error("[Auth] Session save error:", err);
                 return res.redirect("/?error=session_error");
             }
-            res.redirect("/");
+            console.log("[Auth] Session saved successfully, redirecting to dashboard");
+            res.redirect("/dashboard");
         });
 
     } catch (error) {

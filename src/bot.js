@@ -9,7 +9,14 @@ const {
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
+  REST,
 } = require("discord.js");
+
+// Create REST client with increased timeout for large file uploads
+const rest = new REST({ 
+  version: '10',
+  timeout: 300000 // 5 minutes timeout for large files
+}).setToken(process.env.DISCORD_TOKEN);
 
 const { getGuildConfig, setGuildConfig } = require("./configStore");
 const { readPending, upsertPending, removePending } = require("./pendingStore");
@@ -19,10 +26,12 @@ const { startDashboard } = require("./dashboard");
 const {
   detectVideoUrls,
   getVideoInfo,
+  checkFileSize,
   downloadVideo,
   getDirectDownloadUrl,
   convertToMp3,
   compressVideo,
+  autoCompressVideo,
   getFileSize,
   deleteFile,
   formatDuration,
@@ -54,6 +63,9 @@ const client = new Client({
     GatewayIntentBits.DirectMessages,
   ],
   partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.User],
+  rest: {
+    timeout: 300000, // 5 minutes timeout for large files
+  },
 });
 
 // لتفادي جدولة نفس الرسالة أكثر من مرة أثناء التشغيل
@@ -216,7 +228,6 @@ client.on("interactionCreate", async (interaction) => {
       try {
         await downloadQueue.add(async () => {
           updateJob(jobId, { status: 'downloading' });
-
           const startTime = Date.now();
           const queueStatus = downloadQueue.getStatus();
           console.log(`[VideoDownload] Starting download: ${job.url} (${format}, ${quality}) - Queue: ${queueStatus.active}/${queueStatus.total}`);
@@ -229,67 +240,47 @@ client.on("interactionCreate", async (interaction) => {
             throw new Error(`فشل في التحميل: ${err.message}`);
           }
 
-          updateJob(jobId, { status: 'converting', filePath });
-
-          // إذا mp3 وتم تحميل فيديو، نحوله
-          if (format === 'mp3' && !filePath.endsWith('.mp3')) {
-            try {
-              filePath = await convertToMp3(filePath);
-            } catch (err) {
-              deleteFile(filePath);
-              throw new Error(`فشل في التحويل: ${err.message}`);
-            }
-          }
-
-          // التحقق من الحجم
+          // التحقق من الحجم والضغط التلقائي إذا لزم الأمر
           let fileSize = getFileSize(filePath);
           console.log(`[VideoDownload] File size: ${(fileSize / 1024 / 1024).toFixed(2)}MB`);
 
-          // إذا الملف كبير جداً (أكثر من 25MB Discord limit)
+          // إذا الملف كبير جداً (أكثر من 100MB)، نقوم بالضغط التلقائي
           if (fileSize > MAX_FILE_SIZE) {
-            console.log(`[VideoDownload] File too large (${(fileSize / 1024 / 1024).toFixed(1)}MB), getting direct download URL...`);
-            deleteFile(filePath);
-
+            console.log(`[VideoDownload] File too large (${(fileSize / 1024 / 1024).toFixed(1)}MB), compressing...`);
+            updateJob(jobId, { status: 'compressing' });
+            
             try {
-              // Get direct download URL instead
-              const directDownload = await getDirectDownloadUrl(job.url, format, quality);
-              const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-              const remaining = getRemainingRequests(interaction.user.id);
-
-              await interaction.editReply({
-                content: `📦 **الملف كبير جداً للتحميل المباشر** (${(fileSize / 1024 / 1024).toFixed(1)}MB)\n\n` +
-                  `✅ **تم إنشاء رابط التحميل:**\n` +
-                  `🔗 [اضغط هنا للتحميل](${directDownload.url})\n\n` +
-                  `⚠️ **ملاحظة:** الرابط صالح لمدة 6 ساعات تقريباً\n` +
-                  `⏱️ الوقت: ${elapsed}ث | 📥 المتبقي لك: ${remaining} تحميلات في الساعة`,
-              });
-
-              console.log(`[VideoDownload] Sent direct download URL to ${interaction.user.tag}`);
-              deleteJob(jobId);
-              return;
-            } catch (urlError) {
-              console.error(`[VideoDownload] Failed to get direct URL:`, urlError.message);
-              await interaction.editReply({
-                content: `❌ الملف كبير جداً (${(fileSize / 1024 / 1024).toFixed(1)}MB)\n💡 جرب تحميل بجودة أقل (480p أو 720p)`,
-              });
-              deleteJob(jobId);
-              return;
+              filePath = await autoCompressVideo(filePath, 80); // Target 80MB
+              fileSize = getFileSize(filePath);
+              console.log(`[VideoDownload] Compressed to: ${(fileSize / 1024 / 1024).toFixed(2)}MB`);
+            } catch (compressErr) {
+              console.error('[VideoDownload] Compression failed:', compressErr.message);
+              // Continue with original file if compression fails
             }
           }
 
-          // إرسال الملف
+          // إرسال رابط التحميل المباشر دائماً (أفضل من إرسال الملف)
           const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
           const remaining = getRemainingRequests(interaction.user.id);
 
-          await interaction.editReply({
-            content: `✅ تم التحميل بنجاح! (الجودة: ${quality})\n⏱️ الوقت: ${elapsed}ث | 📊 الحجم: ${(fileSize / 1024 / 1024).toFixed(1)}MB\n📥 المتبقي لك: ${remaining} تحميلات في الساعة`,
-            files: [filePath],
-          });
+          try {
+            const directInfo = await getDirectDownloadUrl(job.url, format, quality);
+            
+            await interaction.editReply({
+              content: `✅ **تم التحميل بنجاح!**\n\n🎬 **الجودة:** ${quality}\n⏱️ **الوقت:** ${elapsed} ثانية\n📊 **الحجم:** ${(fileSize / 1024 / 1024).toFixed(1)}MB\n📥 **المتبقي لك:** ${remaining} تحميلات في الساعة\n\n🔗 **رابط التحميل المباشر:**\n\`\`\`${directInfo.url}\`\`\`\n\n💡 **طريقة التحميل:**\n1. انسخ الرابط أعلاه\n2. افتحه في المتصفح\n3. اضغط على الثلاث نقاط (⋮)\n4. اختر "حفظ الفيديو"`,
+            });
 
-          console.log(`[VideoDownload] Sent file to ${interaction.user.tag} (${elapsed}s)`);
+            console.log(`[VideoDownload] Sent direct link to ${interaction.user.tag} (${elapsed}s)`);
+          } catch (directErr) {
+            console.error('[VideoDownload] Error getting direct link:', directErr.message);
+            await interaction.editReply({
+              content: `❌ فشل الحصول على رابط التحميل\n💡 جرب اختيار جودة أخرى أو أرسل الرابط مجدداً`,
+            });
+          }
 
-          // تنظيف
+          // تنظيف فوري للملف بعد إرسال الرابط
           deleteFile(filePath);
+          console.log(`[VideoDownload] Cleaned up temp file: ${filePath}`);
           deleteJob(jobId);
         });
       } catch (err) {
@@ -300,6 +291,11 @@ client.on("interactionCreate", async (interaction) => {
           content: `❌ حدث خطأ: ${err.message}\n💡 تأكد من صلاحية الرابط وجرب مجدداً`,
         });
 
+        // تنظيف الملف في حالة الخطأ أيضاً
+        if (filePath) {
+          deleteFile(filePath);
+          console.log(`[VideoDownload] Cleaned up temp file after error: ${filePath}`);
+        }
         deleteJob(jobId);
       }
 
@@ -332,7 +328,7 @@ client.on("interactionCreate", async (interaction) => {
           : 'لا توجد قنوات محددة';
 
       await interaction.reply({
-        ephemeral: true,
+        flags: [64], // Ephemeral
         content:
           `**إعدادات ميزة التحميل**\n` +
           `- الحالة: ${dlConfig.enabled ? '✅ مفعّلة' : '❌ معطّلة'}\n` +
@@ -346,7 +342,7 @@ client.on("interactionCreate", async (interaction) => {
       const enabled = interaction.options.getBoolean("enabled", true);
       setDownloadConfig(guildId, { enabled });
       await interaction.reply({
-        ephemeral: true,
+        flags: [64], // Ephemeral
         content: enabled ? '✅ تم تفعيل ميزة التحميل' : '❌ تم تعطيل ميزة التحميل',
       });
       return;
@@ -362,7 +358,7 @@ client.on("interactionCreate", async (interaction) => {
 
       setDownloadConfig(guildId, { channels });
       await interaction.reply({
-        ephemeral: true,
+        flags: [64], // Ephemeral
         content: `✅ تمت إضافة القناة ${channel} لقائمة التحميل`,
       });
       return;
@@ -376,7 +372,7 @@ client.on("interactionCreate", async (interaction) => {
 
       setDownloadConfig(guildId, { channels });
       await interaction.reply({
-        ephemeral: true,
+        flags: [64], // Ephemeral
         content: `✅ تمت إزالة القناة ${channel} من قائمة التحميل`,
       });
       return;
@@ -386,7 +382,7 @@ client.on("interactionCreate", async (interaction) => {
       const mode = interaction.options.getString("mode", true);
       setDownloadConfig(guildId, { channels: mode === 'all' ? 'all' : [] });
       await interaction.reply({
-        ephemeral: true,
+        flags: [64], // Ephemeral
         content: mode === 'all'
           ? '✅ تم تفعيل التحميل في جميع القنوات'
           : '✅ تم تحديد نمط القنوات المحددة (استخدم /download addchannel لإضافة قنوات)',
@@ -403,7 +399,7 @@ client.on("interactionCreate", async (interaction) => {
 
     if (sub === "status") {
       await interaction.reply({
-        ephemeral: true,
+        flags: [64], // Ephemeral
         content:
           `**Memerate config**\n` +
           `- Channels: ${config.enabledChannelIds.length ? config.enabledChannelIds.map((id) => `<#${id}>`).join(", ") : "none"}\n` +
@@ -416,7 +412,10 @@ client.on("interactionCreate", async (interaction) => {
     if (sub === "setduration") {
       const minutes = interaction.options.getInteger("minutes", true);
       const next = setGuildConfig(guildId, { durationMinutes: minutes });
-      await interaction.reply({ ephemeral: true, content: `تم ضبط مدة التصويت إلى **${next.durationMinutes}** دقيقة.` });
+      await interaction.reply({ 
+        flags: [64], // Ephemeral
+        content: `تم ضبط مدة التصويت إلى **${next.durationMinutes}** دقيقة.` 
+      });
       return;
     }
 
@@ -424,7 +423,10 @@ client.on("interactionCreate", async (interaction) => {
       const positive = interaction.options.getString("positive", true).trim();
       const negative = interaction.options.getString("negative", true).trim();
       const next = setGuildConfig(guildId, { emojis: { positive, negative } });
-      await interaction.reply({ ephemeral: true, content: `تم ضبط الإيموجيات إلى: ${next.emojis.positive} / ${next.emojis.negative}` });
+      await interaction.reply({
+        flags: [64], // Ephemeral
+        content: `تم ضبط الإيموجيات إلى: ${next.emojis.positive} / ${next.emojis.negative}`,
+      });
       return;
     }
 
@@ -433,7 +435,10 @@ client.on("interactionCreate", async (interaction) => {
       const ids = new Set(config.enabledChannelIds);
       ids.add(channel.id);
       const next = setGuildConfig(guildId, { enabledChannelIds: Array.from(ids) });
-      await interaction.reply({ ephemeral: true, content: `تمت إضافة القناة ${channel} للمراقبة.` });
+      await interaction.reply({
+        flags: [64], // Ephemeral
+        content: `تمت إضافة القناة ${channel} للمراقبة.`,
+      });
       return;
     }
 
@@ -441,7 +446,10 @@ client.on("interactionCreate", async (interaction) => {
       const channel = interaction.options.getChannel("channel", true);
       const nextIds = config.enabledChannelIds.filter((id) => id !== channel.id);
       setGuildConfig(guildId, { enabledChannelIds: nextIds });
-      await interaction.reply({ ephemeral: true, content: `تمت إزالة القناة ${channel} من المراقبة.` });
+      await interaction.reply({
+        flags: [64], // Ephemeral
+        content: `تمت إزالة القناة ${channel} من المراقبة.`,
+      });
       return;
     }
 
@@ -469,13 +477,8 @@ client.on("messageCreate", async (message) => {
 
     console.log(`[VideoDownload] Detected ${firstUrl.platform} link from ${message.author.tag}`);
 
-    // حذف الرسالة الأصلية
-    try {
-      await message.delete();
-      console.log(`[VideoDownload] Deleted original message`);
-    } catch (err) {
-      console.error(`[VideoDownload] Failed to delete message:`, err.message);
-    }
+    // لا نحذف الرسالة الأصلية ولا نحمل تلقائياً
+    // نعرض فقط معلومات الفيديو وأزرار التحميل
 
     try {
       // جلب معلومات الفيديو
@@ -499,8 +502,8 @@ client.on("messageCreate", async (message) => {
       const embed = new EmbedBuilder()
         .setColor(0x5865F2)
         .setTitle(`📹 ${videoInfo.title}`)
-        .setDescription(`**المنصة:** ${getPlatformName(firstUrl.platform)}\n**المدة:** ${formatDuration(videoInfo.duration)}\n**الناشر:** ${videoInfo.author}`)
-        .setFooter({ text: `طلب من ${message.author.tag} • اختر الصيغة والجودة` });
+        .setDescription(`**المنصة:** ${getPlatformName(firstUrl.platform)}\n**المدة:** ${formatDuration(videoInfo.duration)}\n**الناشر:** ${videoInfo.author}\n\n**الرابط:** ${firstUrl.url}`)
+        .setFooter({ text: `طلب من ${message.author.tag} • اختر الصيغة والجودة للتحميل` });
 
       if (videoInfo.thumbnail) {
         embed.setThumbnail(videoInfo.thumbnail);
@@ -524,25 +527,21 @@ client.on("messageCreate", async (message) => {
 
       const row2 = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
+          .setCustomId(`quality_360_mp4_${message.author.id}_${jobId}`)
+          .setLabel('📥 MP4 (360p)')
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
           .setCustomId(`quality_best_mp3_${message.author.id}_${jobId}`)
           .setLabel('🎵 MP3 (192k)')
           .setStyle(ButtonStyle.Secondary),
       );
 
-      // إرسال DM
+      // إرسال الرسالة في نفس القناة (بدون حذف الرسالة الأصلية)
       try {
-        await message.author.send({ embeds: [embed], components: [row1, row2] });
-        console.log(`[VideoDownload] Sent DM to ${message.author.tag}`);
+        await message.reply({ embeds: [embed], components: [row1, row2] });
+        console.log(`[VideoDownload] Sent download options to ${message.author.tag}`);
       } catch (err) {
-        console.error(`[VideoDownload] Failed to send DM:`, err.message);
-        // إذا فشل الـ DM، نرسل في القناة
-        const fallbackMsg = await message.channel.send({
-          content: `<@${message.author.id}>`,
-          embeds: [embed],
-          components: [row1, row2],
-        });
-        // حذف بعد 5 دقائق
-        setTimeout(() => fallbackMsg.delete().catch(() => { }), 300000);
+        console.error(`[VideoDownload] Failed to send reply:`, err.message);
       }
     } catch (err) {
       console.error(`[VideoDownload] Error processing video URL:`, err);

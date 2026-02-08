@@ -39,6 +39,10 @@
           🔥
           Daily Streak
         </a>
+        <a href="#" class="nav-item" data-system="download" onclick="showSystem('download')">
+          📥
+          Video Downloader
+        </a>
       </nav>
 
       <!-- User Profile Section -->
@@ -271,6 +275,146 @@
                 <p>🏆 <strong>إنجازات:</strong></p>
                 <p>🔥 7 أيام = أسبوع كامل!</p>
                 <p>🔥 30 يوم = شهر كامل!</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Download System -->
+        <section id="download-page" class="page">
+          <button class="back-btn" onclick="showServers()">← رجوع للسيرفرات</button>
+
+          <div class="system-header">
+            <div class="system-icon-text">📥</div>
+            <div>
+              <h2>نظام تحميل الفيديوهات</h2>
+              <p>تحميل الفيديوهات من YouTube و TikTok و Instagram وغيرها</p>
+            </div>
+          </div>
+
+          <div class="settings-container">
+            <!-- Download Settings Card -->
+            <div class="card">
+              <h3>الإعدادات العامة</h3>
+
+              <div class="form-group">
+                <label>حالة التحميل</label>
+                <select id="download-enabled-select">
+                  <option value="true">مُفعّل ✅</option>
+                  <option value="false">مُعطّل ❌</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>الجودة الافتراضية</label>
+                <select id="download-quality-select">
+                  <option value="best">أفضل جودة</option>
+                  <option value="720">720p HD</option>
+                  <option value="480">480p</option>
+                  <option value="360">360p</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>الحد الأقصى لحجم الملف (MB)</label>
+                <input type="number" id="max-file-size-input" min="10" max="500" value="100">
+                <small>الملفات الأكبر من هذا الحجم سيتم ضغطها أو تقديم رابط مباشر</small>
+              </div>
+
+              <div class="form-group">
+                <label>الضغط التلقائي</label>
+                <select id="auto-compress-select">
+                  <option value="true">مُفعّل ✅</option>
+                  <option value="false">مُعطّل ❌</option>
+                </select>
+                <small>ضغط الفيديوهات الكبيرة تلقائياً لتقليل الحجم</small>
+              </div>
+
+              <button class="btn primary" onclick="saveDownloadConfig()">حفظ إعدادات التحميل</button>
+            </div>
+
+            <!-- Download Channels Card -->
+            <div class="card">
+              <h3>القنوات المسموح فيها</h3>
+              <p class="card-desc">يمكن للمستخدمين تحميل الفيديوهات من هذه القنوات فقط</p>
+              <div id="download-channels-list" class="channels-list"></div>
+
+              <div class="form-group">
+                <label>إضافة قناة</label>
+                <select id="add-download-channel-select">
+                  <option value="">اختر قناة...</option>
+                </select>
+                <button class="btn small" onclick="addDownloadChannel()">إضافة</button>
+              </div>
+            </div>
+
+            <!-- Queue Status Card -->
+            <div class="card">
+              <h3>حالة طابور التحميل</h3>
+              <div id="queue-status" class="queue-status">
+                <div class="status-item">
+                  <span class="status-label">النشط:</span>
+                  <span class="status-value" id="active-downloads">0</span>
+                </div>
+                <div class="status-item">
+                  <span class="status-label">في الانتظار:</span>
+                  <span class="status-value" id="pending-downloads">0</span>
+                </div>
+                <div class="status-item">
+                  <span class="status-label">إجمالي اليوم:</span>
+                  <span class="status-value" id="total-downloads">0</span>
+                </div>
+              </div>
+              <button class="btn small" onclick="refreshQueueStatus()">🔄 تحديث</button>
+            </div>
+
+            <!-- Download Stats Card -->
+            <div class="card">
+              <h3>إحصائيات التحميل</h3>
+              <div id="download-stats" class="stats-grid">
+                <div class="stat-item">
+                  <div class="stat-number" id="downloads-today">0</div>
+                  <div class="stat-label">التحميلات اليوم</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-number" id="downloads-week">0</div>
+                  <div class="stat-label">التحميلات الأسبوع</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-number" id="downloads-total">0</div>
+                  <div class="stat-label">إجمالي التحميلات</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-number" id="data-saved">0 GB</div>
+                  <div class="stat-label">البيانات المحفوظة</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Supported Platforms Card -->
+            <div class="card info-card">
+              <h3>المنصات المدعومة</h3>
+              <div class="platforms-grid">
+                <div class="platform-item">
+                  <div class="platform-icon">📺</div>
+                  <div class="platform-name">YouTube</div>
+                  <div class="platform-status">مدعوم بالكامل</div>
+                </div>
+                <div class="platform-item">
+                  <div class="platform-icon">🎵</div>
+                  <div class="platform-name">TikTok</div>
+                  <div class="platform-status">مدعوم بالكامل</div>
+                </div>
+                <div class="platform-item">
+                  <div class="platform-icon">📷</div>
+                  <div class="platform-name">Instagram</div>
+                  <div class="platform-status">مدعوم بالكامل</div>
+                </div>
+                <div class="platform-item">
+                  <div class="platform-icon">🐦</div>
+                  <div class="platform-name">Twitter/X</div>
+                  <div class="platform-status">مدعوم بالكامل</div>
+                </div>
               </div>
             </div>
           </div>
