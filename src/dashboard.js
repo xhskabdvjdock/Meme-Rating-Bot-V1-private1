@@ -11,6 +11,10 @@ const authRoutes = require("./auth");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+console.log(`[Dashboard] Initializing dashboard module`);
+console.log(`[Dashboard] PORT from environment: ${process.env.PORT}`);
+console.log(`[Dashboard] Using PORT: ${PORT}`);
+
 // مسار مجلد الداشبورد
 const dashboardPath = path.resolve(__dirname, "..", "dashboard");
 console.log("[Dashboard] Static files path:", dashboardPath);
@@ -186,26 +190,75 @@ app.use((req, res, next) => {
 // متغير لحفظ الـ server instance
 let serverInstance = null;
 
-function startDashboard(client) {
-    discordClient = client;
-    console.log("[Dashboard] Discord client connected");
-
-    // بدء Express server فقط إذا لم يكن يعمل
+// Auto-start server for Render compatibility
+function autoStartServer() {
     if (!serverInstance) {
+        console.log("[Dashboard] Auto-starting server for Render compatibility...");
+        console.log(`[Dashboard] Attempting to start server on port ${PORT}`);
+        
         serverInstance = app.listen(PORT, '0.0.0.0', () => {
             console.log(`[Dashboard] ✅ Server running on port ${PORT}`);
             console.log(`[Dashboard] Health check available at /health`);
+            console.log(`[Dashboard] Server address: ${serverInstance.address()}`);
         });
         
         // Handle server errors
         serverInstance.on('error', (err) => {
+            console.error('[Dashboard] Server error:', err);
             if (err.code === 'EADDRINUSE') {
                 console.error(`[Dashboard] Port ${PORT} is already in use`);
+            } else if (err.code === 'EACCES') {
+                console.error(`[Dashboard] Permission denied for port ${PORT}`);
             } else {
-                console.error('[Dashboard] Server error:', err);
+                console.error('[Dashboard] Unknown server error:', err);
             }
+        });
+        
+        // Log when server is actually listening
+        serverInstance.on('listening', () => {
+            const addr = serverInstance.address();
+            console.log(`[Dashboard] Server listening on ${addr.address}:${addr.port}`);
         });
     }
 }
+
+function startDashboard(client) {
+    discordClient = client;
+    console.log("[Dashboard] Discord client connected");
+    console.log(`[Dashboard] Attempting to start server on port ${PORT}`);
+
+    // بدء Express server فقط إذا لم يكن يعمل
+    if (!serverInstance) {
+        console.log("[Dashboard] Starting new server instance...");
+        serverInstance = app.listen(PORT, '0.0.0.0', () => {
+            console.log(`[Dashboard] ✅ Server running on port ${PORT}`);
+            console.log(`[Dashboard] Health check available at /health`);
+            console.log(`[Dashboard] Server address: ${serverInstance.address()}`);
+        });
+        
+        // Handle server errors
+        serverInstance.on('error', (err) => {
+            console.error('[Dashboard] Server error:', err);
+            if (err.code === 'EADDRINUSE') {
+                console.error(`[Dashboard] Port ${PORT} is already in use`);
+            } else if (err.code === 'EACCES') {
+                console.error(`[Dashboard] Permission denied for port ${PORT}`);
+            } else {
+                console.error('[Dashboard] Unknown server error:', err);
+            }
+        });
+        
+        // Log when server is actually listening
+        serverInstance.on('listening', () => {
+            const addr = serverInstance.address();
+            console.log(`[Dashboard] Server listening on ${addr.address}:${addr.port}`);
+        });
+    } else {
+        console.log("[Dashboard] Server instance already exists");
+    }
+}
+
+// Auto-start server after a short delay for Render compatibility
+setTimeout(autoStartServer, 1000);
 
 module.exports = { startDashboard };
