@@ -127,9 +127,25 @@ router.get("/api/user", (req, res) => {
     console.log("[Auth] /api/user called");
     console.log("[Auth] Session ID:", req.sessionID);
     console.log("[Auth] Session user:", req.session.user ? req.session.user.username : "none");
-    console.log("[Auth] Cookies:", req.headers.cookie);
-    console.log("[Auth] Session data:", req.session);
+    
+    if (!req.session.user) {
+        console.log("[Auth] No user in session, returning loggedIn: false");
+        return res.json({ loggedIn: false });
+    }
+    
+    console.log("[Auth] User found in session:", req.session.user.username);
+    res.json({
+        loggedIn: true,
+        user: req.session.user
+    });
+});
 
+// الحصول على معلومات المستخدم الحالي (مسار بديل للداشبورد)
+router.get("/auth/api/user", (req, res) => {
+    console.log("[Auth] /auth/api/user called");
+    console.log("[Auth] Session ID:", req.sessionID);
+    console.log("[Auth] Session user:", req.session.user ? req.session.user.username : "none");
+    
     if (!req.session.user) {
         console.log("[Auth] No user in session, returning loggedIn: false");
         return res.json({ loggedIn: false });
