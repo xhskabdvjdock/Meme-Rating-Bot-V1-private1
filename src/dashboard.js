@@ -11,7 +11,7 @@ const authRoutes = require("./auth");
 const downloadQueue = require("./downloadQueue");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
 // مسار مجلد الداشبورد
 const dashboardPath = path.resolve(__dirname, "..", "dashboard");
@@ -29,16 +29,16 @@ if (fs.existsSync(indexPath)) {
 // Trust proxy for Render (HTTPS behind load balancer)
 app.set('trust proxy', 1);
 
-// Session middleware
+// Session middleware with production-ready settings
 app.use(session({
     secret: process.env.SESSION_SECRET || "meme-rate-secret-key-change-in-production",
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: process.env.NODE_ENV === 'production', // true in production
+        secure: process.env.NODE_ENV === 'production',
         httpOnly: true,
         sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 أيام
+        maxAge: 7 * 24 * 60 * 60 * 1000
     }
 }));
 
@@ -58,13 +58,25 @@ app.use("/auth", authRoutes);
 let discordClient = null;
 
 
-// Health check endpoint
+// Health check endpoint - مهم جداً لـ Render
 app.get("/health", (req, res) => {
-    res.json({
+    res.status(200).json({
         status: "ok",
+        timestamp: new Date().toISOString(),
         dashboardPath,
         indexExists: fs.existsSync(indexPath),
-        discordConnected: discordClient !== null
+        discordConnected: discordClient !== null,
+        port: PORT
+    });
+});
+
+// Root endpoint - مهم أيضاً لـ Render
+app.get("/", (req, res) => {
+    res.status(200).json({
+        status: "Meme Rate Bot Dashboard",
+        health: "/health",
+        auth: "/auth",
+        dashboard: "/dashboard"
     });
 });
 
@@ -234,9 +246,23 @@ function startDashboard(client) {
     // بدء Express server فقط إذا لم يكن يعمل
     if (!serverInstance) {
         serverInstance = app.listen(PORT, '0.0.0.0', () => {
-            console.log(`[Dashboard] ✅ Running at http://0.0.0.0:${PORT}`);
-            console.log(`[Dashboard] Health check: http://0.0.0.0:${PORT}/health`);
-            console.log(`[Dashboard] External URL: https://meme-rate-bot.onrender.com`);
+            console.log(`[Dashboard] ✅ Server running on port ${PORT}`);
+            console.log(`[Dashboard] ✅ Health check: http://0.0.0.0:${PORT}/health`);
+            console.log(`[Dashboard] ✅ External URL: https://meme-rate-bot.onrender.com`);
+            console.log(`[Dashboard] ✅ Ready for Render health checks!`);
+        });
+
+        // Handle server errors
+        serverInstance.on('error', (err) => {
+            console.error('[Dashboard] Server error:', err);
+        });
+
+        // Graceful shutdown
+        process.on('SIGTERM', () => {
+            console.log('[Dashboard] SIGTERM received, shutting down gracefully');
+            serverInstance.close(() => {
+                console.log('[Dashboard] Process terminated');
+            });
         });
     }
 }
