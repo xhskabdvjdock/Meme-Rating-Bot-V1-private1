@@ -49,6 +49,9 @@ const {
 } = require("./downloadStore");
 
 const token = process.env.DISCORD_TOKEN;
+console.log("[Bot] Discord Token exists:", !!token);
+console.log("[Bot] Token length:", token ? token.length : 0);
+
 if (!token) {
   console.error("Missing DISCORD_TOKEN. Put it in ./env (see env.example).");
   process.exit(1);
@@ -152,13 +155,16 @@ function scheduleFinalize(guildId, channelId, messageId, endsAtMs, createdAtMs) 
 }
 
 client.once("ready", async () => {
-  console.log(`Logged in as ${client.user.tag}`);
+  console.log(`[Bot] ✅ Successfully logged in as ${client.user.tag}`);
+  console.log(`[Bot] ✅ User ID: ${client.user.id}`);
+  console.log(`[Bot] ✅ Guilds count: ${client.guilds.cache.size}`);
 
   // ضبط حالة البوت - dnd + playing
   client.user.setPresence({
     activities: [{ name: 'dev by : wlc8', type: 0 }],
     status: 'dnd'
   });
+  console.log("[Bot] ✅ Bot presence set");
 
   // إعادة جدولة المؤقّتات بعد إعادة تشغيل البوت
   const pending = readPending();
@@ -175,11 +181,12 @@ client.once("ready", async () => {
     }
     scheduleFinalize(record.guildId, record.channelId, messageId, record.endsAtMs, record.createdAtMs || now);
   }
+  console.log("[Bot] ✅ Pending votes rescheduled");
 
   // بدء Dashboard/Express server بعد اتصال البوت
   console.log("[Bot] Starting dashboard after Discord connection...");
   startDashboard(client);
-  console.log("[Bot] Dashboard started and ready");
+  console.log("[Bot] ✅ Dashboard started and ready");
 });
 
 client.on("interactionCreate", async (interaction) => {
@@ -568,5 +575,12 @@ client.on("messageCreate", async (message) => {
   scheduleFinalize(guildId, message.channelId, message.id, endsAtMs, createdAtMs);
 });
 
-client.login(token);
+client.login(token).catch(err => {
+  console.error("[Bot] Failed to login:", err);
+  if (err.code === 'TOKEN_INVALID') {
+    console.error("[Bot] Discord token is invalid!");
+  } else if (err.code === 'DISALLOWED_INTENTS') {
+    console.error("[Bot] Bot intents are not allowed!");
+  }
+});
 
