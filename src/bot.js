@@ -48,6 +48,10 @@ const {
   getRateLimitReset,
 } = require("./downloadStore");
 
+// Start dashboard immediately for Render port detection
+console.log('[Bot] Starting dashboard immediately for port binding...');
+startDashboard(null);
+
 const token = process.env.DISCORD_TOKEN;
 if (!token) {
   console.error("Missing DISCORD_TOKEN. Put it in ./env (see env.example).");
@@ -176,9 +180,10 @@ client.once("ready", async () => {
     scheduleFinalize(record.guildId, record.channelId, messageId, record.endsAtMs, record.createdAtMs || now);
   }
 
-  // بدء Dashboard/Express server
+  // Update dashboard with Discord client
+  console.log("[Bot] Updating dashboard with Discord client...");
   startDashboard(client);
-  console.log("[Bot] Dashboard started and ready");
+  console.log("[Bot] Dashboard updated and ready");
 });
 
 client.on("interactionCreate", async (interaction) => {
