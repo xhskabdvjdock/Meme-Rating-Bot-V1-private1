@@ -1,4 +1,9 @@
-require("dotenv").config({ path: ".env" });
+// Load environment variables from .env file for local development
+// In production (Render), environment variables are set directly
+if (process.env.NODE_ENV !== 'production') {
+  require("dotenv").config({ path: ".env" });
+}
+
 const {
   Client,
   GatewayIntentBits,
@@ -42,13 +47,18 @@ const {
 const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.CLIENT_ID;
 
+console.log("[Bot] Environment check:");
+console.log(`[Bot] NODE_ENV: ${process.env.NODE_ENV}`);
+console.log(`[Bot] DISCORD_TOKEN exists: ${!!token}`);
+console.log(`[Bot] CLIENT_ID exists: ${!!clientId}`);
+
 if (!token) {
-  console.error("Missing DISCORD_TOKEN. Put it in .env (see env.example).");
+  console.error("Missing DISCORD_TOKEN. Put it in .env (see env.example) or set it in Render environment variables.");
   process.exit(1);
 }
 
 if (!clientId) {
-  console.warn("Missing CLIENT_ID. Slash commands will not be auto-registered. Put it in .env (see env.example).");
+  console.warn("Missing CLIENT_ID. Slash commands will not be auto-registered. Put it in .env (see env.example) or set it in Render environment variables.");
 }
 
 const client = new Client({
