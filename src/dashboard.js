@@ -297,6 +297,11 @@ function startDashboard(client) {
                 console.log('[Dashboard] Process terminated');
             });
         });
+
+        // Explicitly log port binding for Render detection
+        console.log(`[Dashboard] PORT BINDING: ${bindPort}`);
+        console.log(`[Dashboard] HOST: 0.0.0.0`);
+        console.log(`[Dashboard] RENDER_PORT_DETECTION: ACTIVE`);
     }
 }
 
