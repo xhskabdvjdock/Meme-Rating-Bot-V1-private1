@@ -48,7 +48,7 @@ const {
   getRateLimitReset,
 } = require("./downloadStore");
 
-// Start dashboard immediately for Render port detection
+// Start dashboard immediately for Render port detection (without Discord client)
 console.log('[Bot] Starting dashboard immediately for port binding...');
 startDashboard(null);
 
@@ -180,10 +180,10 @@ client.once("ready", async () => {
     scheduleFinalize(record.guildId, record.channelId, messageId, record.endsAtMs, record.createdAtMs || now);
   }
 
-  // Update dashboard with Discord client
-  console.log("[Bot] Updating dashboard with Discord client...");
+  // بدء Dashboard/Express server بعد اتصال البوت
+  console.log("[Bot] Starting dashboard after Discord connection...");
   startDashboard(client);
-  console.log("[Bot] Dashboard updated and ready");
+  console.log("[Bot] Dashboard started and ready");
 });
 
 client.on("interactionCreate", async (interaction) => {
