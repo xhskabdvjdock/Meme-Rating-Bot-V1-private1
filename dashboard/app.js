@@ -46,7 +46,7 @@ async function initDashboard() {
 // Check authentication
 async function checkAuth() {
     try {
-        const response = await fetch(`${API}/api/user`);
+        const response = await fetch(`${API}/auth/api/user`);
         const data = await response.json();
         
         if (!data.loggedIn) {
@@ -73,7 +73,7 @@ function updateUserUI() {
 // Load user data
 async function loadUserData() {
     try {
-        const response = await fetch(`${API}/api/user/guilds`);
+        const response = await fetch(`${API}/api/guilds`);
         guilds = await response.json();
         stats.servers = guilds.length;
         updateStats();
