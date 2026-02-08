@@ -231,8 +231,9 @@ function startDashboard(client) {
     // بدء Express server فقط إذا لم يكن يعمل
     if (!serverInstance) {
         serverInstance = app.listen(PORT, '0.0.0.0', () => {
-            console.log(`[Dashboard] ✅ Running at http://localhost:${PORT}`);
-            console.log(`[Dashboard] Health check: http://localhost:${PORT}/health`);
+            console.log(`[Dashboard] ✅ Running at http://0.0.0.0:${PORT}`);
+            console.log(`[Dashboard] Health check: http://0.0.0.0:${PORT}/health`);
+            console.log(`[Dashboard] External URL: https://meme-rate-bot.onrender.com`);
         });
     }
 }
